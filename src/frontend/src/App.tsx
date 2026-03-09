@@ -1,12 +1,14 @@
 import { Toaster } from "@/components/ui/sonner";
 import { useState } from "react";
+import ChatbotWidget from "./components/ChatbotWidget";
 import Navbar from "./components/Navbar";
 import AdminPage from "./pages/AdminPage";
+import BudgetPage from "./pages/BudgetPage";
 import HomePage from "./pages/HomePage";
 import ItineraryPage from "./pages/ItineraryPage";
 import PlacesPage from "./pages/PlacesPage";
 
-type Page = "home" | "places" | "itinerary" | "admin";
+type Page = "home" | "places" | "itinerary" | "admin" | "budget";
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>("home");
@@ -21,9 +23,11 @@ export default function App() {
         {currentPage === "places" && <PlacesPage />}
         {currentPage === "itinerary" && <ItineraryPage />}
         {currentPage === "admin" && <AdminPage />}
+        {currentPage === "budget" && <BudgetPage />}
       </main>
       <Footer />
       <Toaster richColors position="top-right" />
+      <ChatbotWidget navigate={navigate} />
     </div>
   );
 }

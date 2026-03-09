@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import {
+  Calculator,
   Loader2,
   LogIn,
   LogOut,
@@ -12,7 +13,7 @@ import { useState } from "react";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useIsCallerAdmin } from "../hooks/useQueries";
 
-type Page = "home" | "places" | "itinerary" | "admin";
+type Page = "home" | "places" | "itinerary" | "admin" | "budget";
 
 interface NavbarProps {
   currentPage: Page;
@@ -31,10 +32,21 @@ export default function Navbar({ currentPage, navigate }: NavbarProps) {
     ? `${principal.slice(0, 5)}…${principal.slice(-4)}`
     : "";
 
-  const navLinks: { label: string; page: Page; ocid: string }[] = [
+  const navLinks: {
+    label: string;
+    page: Page;
+    ocid: string;
+    icon?: React.ReactNode;
+  }[] = [
     { label: "Home", page: "home", ocid: "nav.home_link" },
     { label: "Places", page: "places", ocid: "nav.places_link" },
     { label: "Itinerary", page: "itinerary", ocid: "nav.itinerary_link" },
+    {
+      label: "Budget",
+      page: "budget",
+      ocid: "nav.budget_link",
+      icon: <Calculator className="w-3.5 h-3.5" />,
+    },
   ];
 
   const handleNav = (page: Page) => {
@@ -68,12 +80,13 @@ export default function Navbar({ currentPage, navigate }: NavbarProps) {
               type="button"
               data-ocid={link.ocid}
               onClick={() => handleNav(link.page)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
                 currentPage === link.page
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
             >
+              {link.icon}
               {link.label}
             </button>
           ))}
@@ -156,12 +169,13 @@ export default function Navbar({ currentPage, navigate }: NavbarProps) {
               type="button"
               data-ocid={link.ocid}
               onClick={() => handleNav(link.page)}
-              className={`w-full text-left px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
+              className={`w-full text-left px-4 py-2.5 rounded-md text-sm font-medium flex items-center gap-2 transition-colors ${
                 currentPage === link.page
                   ? "bg-primary text-primary-foreground"
                   : "text-foreground hover:bg-muted"
               }`}
             >
+              {link.icon}
               {link.label}
             </button>
           ))}
