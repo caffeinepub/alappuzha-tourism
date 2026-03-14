@@ -7,8 +7,19 @@ import BudgetPage from "./pages/BudgetPage";
 import HomePage from "./pages/HomePage";
 import ItineraryPage from "./pages/ItineraryPage";
 import PlacesPage from "./pages/PlacesPage";
+import RestaurantsPage from "./pages/RestaurantsPage";
+import StayPage from "./pages/StayPage";
+import TransportPage from "./pages/TransportPage";
 
-type Page = "home" | "places" | "itinerary" | "admin" | "budget";
+export type Page =
+  | "home"
+  | "places"
+  | "itinerary"
+  | "admin"
+  | "budget"
+  | "stay"
+  | "transport"
+  | "restaurants";
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>("home");
@@ -24,6 +35,9 @@ export default function App() {
         {currentPage === "itinerary" && <ItineraryPage />}
         {currentPage === "admin" && <AdminPage />}
         {currentPage === "budget" && <BudgetPage />}
+        {currentPage === "stay" && <StayPage />}
+        {currentPage === "transport" && <TransportPage />}
+        {currentPage === "restaurants" && <RestaurantsPage />}
       </main>
       <Footer />
       <Toaster richColors position="top-right" />

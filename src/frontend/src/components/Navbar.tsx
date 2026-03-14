@@ -1,5 +1,7 @@
 import { Button } from "@/components/ui/button";
 import {
+  Anchor,
+  BedDouble,
   Calculator,
   Loader2,
   LogIn,
@@ -7,13 +9,12 @@ import {
   MapPin,
   Menu,
   ShieldCheck,
+  UtensilsCrossed,
   X,
 } from "lucide-react";
 import { useState } from "react";
+import type { Page } from "../App";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
-import { useIsCallerAdmin } from "../hooks/useQueries";
-
-type Page = "home" | "places" | "itinerary" | "admin" | "budget";
 
 interface NavbarProps {
   currentPage: Page;
@@ -23,7 +24,6 @@ interface NavbarProps {
 export default function Navbar({ currentPage, navigate }: NavbarProps) {
   const { login, clear, identity, isLoggingIn, isInitializing } =
     useInternetIdentity();
-  const { data: isAdmin } = useIsCallerAdmin();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const isLoggedIn = !!identity;
@@ -41,6 +41,24 @@ export default function Navbar({ currentPage, navigate }: NavbarProps) {
     { label: "Home", page: "home", ocid: "nav.home_link" },
     { label: "Places", page: "places", ocid: "nav.places_link" },
     { label: "Itinerary", page: "itinerary", ocid: "nav.itinerary_link" },
+    {
+      label: "Stay",
+      page: "stay",
+      ocid: "nav.stay_link",
+      icon: <BedDouble className="w-3.5 h-3.5" />,
+    },
+    {
+      label: "Transport",
+      page: "transport",
+      ocid: "nav.transport_link",
+      icon: <Anchor className="w-3.5 h-3.5" />,
+    },
+    {
+      label: "Restaurants",
+      page: "restaurants",
+      ocid: "nav.restaurants_link",
+      icon: <UtensilsCrossed className="w-3.5 h-3.5" />,
+    },
     {
       label: "Budget",
       page: "budget",
@@ -80,7 +98,7 @@ export default function Navbar({ currentPage, navigate }: NavbarProps) {
               type="button"
               data-ocid={link.ocid}
               onClick={() => handleNav(link.page)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
                 currentPage === link.page
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -90,21 +108,19 @@ export default function Navbar({ currentPage, navigate }: NavbarProps) {
               {link.label}
             </button>
           ))}
-          {isAdmin && (
-            <button
-              type="button"
-              data-ocid="nav.admin_link"
-              onClick={() => handleNav("admin")}
-              className={`px-4 py-2 rounded-md text-sm font-medium flex items-center gap-1.5 transition-colors ${
-                currentPage === "admin"
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              Admin
-            </button>
-          )}
+          <button
+            type="button"
+            data-ocid="nav.admin_link"
+            onClick={() => handleNav("admin")}
+            className={`px-3 py-2 rounded-md text-sm font-medium flex items-center gap-1.5 transition-colors ${
+              currentPage === "admin"
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            Admin
+          </button>
         </nav>
 
         {/* Right: Auth */}
@@ -179,21 +195,19 @@ export default function Navbar({ currentPage, navigate }: NavbarProps) {
               {link.label}
             </button>
           ))}
-          {isAdmin && (
-            <button
-              type="button"
-              data-ocid="nav.admin_link"
-              onClick={() => handleNav("admin")}
-              className={`w-full text-left px-4 py-2.5 rounded-md text-sm font-medium flex items-center gap-2 transition-colors ${
-                currentPage === "admin"
-                  ? "bg-accent text-accent-foreground"
-                  : "text-foreground hover:bg-muted"
-              }`}
-            >
-              <ShieldCheck className="w-4 h-4" />
-              Admin
-            </button>
-          )}
+          <button
+            type="button"
+            data-ocid="nav.admin_link"
+            onClick={() => handleNav("admin")}
+            className={`w-full text-left px-4 py-2.5 rounded-md text-sm font-medium flex items-center gap-2 transition-colors ${
+              currentPage === "admin"
+                ? "bg-accent text-accent-foreground"
+                : "text-foreground hover:bg-muted"
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4" />
+            Admin
+          </button>
         </div>
       )}
     </header>

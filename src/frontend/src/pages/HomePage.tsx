@@ -1,10 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { Anchor, ArrowRight, MapPin, Star, Waves } from "lucide-react";
 import { motion } from "motion/react";
+import type { Page } from "../App";
 import PlaceCard, { PlaceCardSkeleton } from "../components/PlaceCard";
 import { useAllTouristPlaces } from "../hooks/useQueries";
-
-type Page = "home" | "places" | "itinerary" | "admin";
 
 interface HomePageProps {
   navigate: (page: Page) => void;
@@ -208,14 +207,24 @@ export default function HomePage({ navigate }: HomePageProps) {
               Build a day-by-day itinerary, discover hidden gems, and make
               memories that last forever.
             </p>
-            <Button
-              onClick={() => navigate("itinerary")}
-              size="lg"
-              className="bg-amber-400 hover:bg-amber-500 text-amber-950 font-semibold shadow-lg gap-2"
-            >
-              Start Planning
-              <ArrowRight className="w-4 h-4" />
-            </Button>
+            <div className="flex flex-wrap justify-center gap-3">
+              <Button
+                onClick={() => navigate("itinerary")}
+                size="lg"
+                className="bg-amber-400 hover:bg-amber-500 text-amber-950 font-semibold shadow-lg gap-2"
+              >
+                Start Planning
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+              <Button
+                onClick={() => navigate("stay")}
+                size="lg"
+                variant="outline"
+                className="border-white/40 text-white hover:bg-white/10"
+              >
+                Browse Stays
+              </Button>
+            </div>
           </motion.div>
         </div>
       </section>
@@ -277,6 +286,78 @@ export const SAMPLE_PLACES = [
       "The 450-year-old St. Andrew's Basilica, a Portuguese-era colonial masterpiece and important pilgrimage site on the Arabian Sea coast.",
     category: "Heritage",
     mapsUrl: "https://maps.google.com/?q=Arthunkal+Church+Kerala",
+    imageUrl: "/assets/generated/place-church.dim_600x400.jpg",
+  },
+  {
+    id: BigInt(7),
+    name: "Vembanad Lake",
+    description:
+      "The longest lake in India stretching across three districts, offering serene boat rides, bird watching, and stunning sunrises over misty waters.",
+    category: "Backwaters",
+    mapsUrl: "https://maps.google.com/?q=Vembanad+Lake+Kerala",
+    imageUrl: "/assets/generated/place-houseboat.dim_600x400.jpg",
+  },
+  {
+    id: BigInt(8),
+    name: "Kuttanad Paddy Fields",
+    description:
+      "The rice bowl of Kerala — vast emerald paddy fields cultivated below sea level, creating a surreal landscape unique in Asia.",
+    category: "Nature",
+    mapsUrl: "https://maps.google.com/?q=Kuttanad+Kerala",
+    imageUrl: "/assets/generated/place-punnamada.dim_600x400.jpg",
+  },
+  {
+    id: BigInt(9),
+    name: "Ambalappuzha Sri Krishna Temple",
+    description:
+      "A 14th-century temple famous for its mythical palpayasam (sweet rice porridge) and magnificent Dravidian architecture.",
+    category: "Temple",
+    mapsUrl: "https://maps.google.com/?q=Ambalappuzha+Sri+Krishna+Temple",
+    imageUrl: "/assets/generated/place-church.dim_600x400.jpg",
+  },
+  {
+    id: BigInt(10),
+    name: "Krishnapuram Palace",
+    description:
+      "An 18th-century Kerala-style palace museum housing rare murals, sculptures, and antiques. Home to the famous Gajendra Moksham mural.",
+    category: "Heritage",
+    mapsUrl: "https://maps.google.com/?q=Krishnapuram+Palace+Kerala",
+    imageUrl: "/assets/generated/place-church.dim_600x400.jpg",
+  },
+  {
+    id: BigInt(11),
+    name: "Champakulam",
+    description:
+      "A picturesque village known for its magnificent water processions, snake boat races, and the oldest Christian church in Kerala.",
+    category: "Culture",
+    mapsUrl: "https://maps.google.com/?q=Champakulam+Kerala",
+    imageUrl: "/assets/generated/place-punnamada.dim_600x400.jpg",
+  },
+  {
+    id: BigInt(12),
+    name: "Mannarasala Nagaraja Temple",
+    description:
+      "A unique forest temple dedicated to serpent gods, surrounded by a dense grove of ancient trees and over 30,000 serpent idols.",
+    category: "Temple",
+    mapsUrl: "https://maps.google.com/?q=Mannarasala+Temple+Kerala",
+    imageUrl: "/assets/generated/place-church.dim_600x400.jpg",
+  },
+  {
+    id: BigInt(13),
+    name: "Kumarakom Bird Sanctuary",
+    description:
+      "A cluster of small islands on Vembanad Lake, famous as a bird sanctuary hosting migratory birds like Siberian cranes and egrets.",
+    category: "Nature",
+    mapsUrl: "https://maps.google.com/?q=Kumarakom+Bird+Sanctuary+Kerala",
+    imageUrl: "/assets/generated/place-island.dim_600x400.jpg",
+  },
+  {
+    id: BigInt(14),
+    name: "Revi Karunakaran Museum",
+    description:
+      "A world-class private museum displaying rare glass artifacts, antique European furniture, Venetian glass, and priceless ivory carvings.",
+    category: "Heritage",
+    mapsUrl: "https://maps.google.com/?q=Revi+Karunakaran+Museum+Alappuzha",
     imageUrl: "/assets/generated/place-church.dim_600x400.jpg",
   },
 ];
