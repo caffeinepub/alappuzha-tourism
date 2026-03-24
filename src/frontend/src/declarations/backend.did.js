@@ -26,11 +26,30 @@ export const ItineraryDayLabel = IDL.Record({
   'places' : IDL.Vec(IDL.Nat),
   'dayLabel' : IDL.Text,
 });
+export const http_header = IDL.Record({
+  'value' : IDL.Text,
+  'name' : IDL.Text,
+});
+export const http_request_result = IDL.Record({
+  'status' : IDL.Nat,
+  'body' : IDL.Vec(IDL.Nat8),
+  'headers' : IDL.Vec(http_header),
+});
+export const TransformationInput = IDL.Record({
+  'context' : IDL.Vec(IDL.Nat8),
+  'response' : http_request_result,
+});
+export const TransformationOutput = IDL.Record({
+  'status' : IDL.Nat,
+  'body' : IDL.Vec(IDL.Nat8),
+  'headers' : IDL.Vec(http_header),
+});
 
 export const idlService = IDL.Service({
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
   'addTouristPlace' : IDL.Func([TouristPlace], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'chatWithAI' : IDL.Func([IDL.Text], [IDL.Text], []),
   'clearMyItinerary' : IDL.Func([], [], []),
   'deleteTouristPlace' : IDL.Func([IDL.Nat], [], []),
   'getAllTouristPlaces' : IDL.Func([], [IDL.Vec(TouristPlace)], ['query']),
@@ -46,9 +65,14 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'getTouristPlace' : IDL.Func([IDL.Nat], [TouristPlace], ['query']),
-  'initialize' : IDL.Func([], [], []),
+  'initializeTouristPlaces' : IDL.Func([], [], []),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'saveMyItinerary' : IDL.Func([IDL.Vec(IDL.Vec(ItineraryDayLabel))], [], []),
+  'transform' : IDL.Func(
+      [TransformationInput],
+      [TransformationOutput],
+      ['query'],
+    ),
   'updateTouristPlace' : IDL.Func([TouristPlace], [], []),
 });
 
@@ -73,11 +97,27 @@ export const idlFactory = ({ IDL }) => {
     'places' : IDL.Vec(IDL.Nat),
     'dayLabel' : IDL.Text,
   });
+  const http_header = IDL.Record({ 'value' : IDL.Text, 'name' : IDL.Text });
+  const http_request_result = IDL.Record({
+    'status' : IDL.Nat,
+    'body' : IDL.Vec(IDL.Nat8),
+    'headers' : IDL.Vec(http_header),
+  });
+  const TransformationInput = IDL.Record({
+    'context' : IDL.Vec(IDL.Nat8),
+    'response' : http_request_result,
+  });
+  const TransformationOutput = IDL.Record({
+    'status' : IDL.Nat,
+    'body' : IDL.Vec(IDL.Nat8),
+    'headers' : IDL.Vec(http_header),
+  });
   
   return IDL.Service({
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
     'addTouristPlace' : IDL.Func([TouristPlace], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'chatWithAI' : IDL.Func([IDL.Text], [IDL.Text], []),
     'clearMyItinerary' : IDL.Func([], [], []),
     'deleteTouristPlace' : IDL.Func([IDL.Nat], [], []),
     'getAllTouristPlaces' : IDL.Func([], [IDL.Vec(TouristPlace)], ['query']),
@@ -93,9 +133,14 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'getTouristPlace' : IDL.Func([IDL.Nat], [TouristPlace], ['query']),
-    'initialize' : IDL.Func([], [], []),
+    'initializeTouristPlaces' : IDL.Func([], [], []),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'saveMyItinerary' : IDL.Func([IDL.Vec(IDL.Vec(ItineraryDayLabel))], [], []),
+    'transform' : IDL.Func(
+        [TransformationInput],
+        [TransformationOutput],
+        ['query'],
+      ),
     'updateTouristPlace' : IDL.Func([TouristPlace], [], []),
   });
 };

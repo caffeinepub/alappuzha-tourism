@@ -89,6 +89,20 @@ export class ExternalBlob {
         return this;
     }
 }
+export interface http_request_result {
+    status: bigint;
+    body: Uint8Array;
+    headers: Array<http_header>;
+}
+export interface TransformationOutput {
+    status: bigint;
+    body: Uint8Array;
+    headers: Array<http_header>;
+}
+export interface TransformationInput {
+    context: Uint8Array;
+    response: http_request_result;
+}
 export interface TouristPlace {
     id: bigint;
     mapsUrl: string;
@@ -102,6 +116,10 @@ export interface ItineraryDayLabel {
     places: Array<bigint>;
     dayLabel: string;
 }
+export interface http_header {
+    value: string;
+    name: string;
+}
 export enum UserRole {
     admin = "admin",
     user = "user",
@@ -111,6 +129,7 @@ export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
     addTouristPlace(place: TouristPlace): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    chatWithAI(userMessage: string): Promise<string>;
     clearMyItinerary(): Promise<void>;
     deleteTouristPlace(id: bigint): Promise<void>;
     getAllTouristPlaces(): Promise<Array<TouristPlace>>;
@@ -118,9 +137,10 @@ export interface backendInterface {
     getMyItinerary(): Promise<Array<Array<ItineraryDayLabel>>>;
     getPlacesByCategory(category: string): Promise<Array<TouristPlace>>;
     getTouristPlace(id: bigint): Promise<TouristPlace>;
-    initialize(): Promise<void>;
+    initializeTouristPlaces(): Promise<void>;
     isCallerAdmin(): Promise<boolean>;
     saveMyItinerary(itinerary: Array<Array<ItineraryDayLabel>>): Promise<void>;
+    transform(input: TransformationInput): Promise<TransformationOutput>;
     updateTouristPlace(place: TouristPlace): Promise<void>;
 }
 import type { UserRole as _UserRole } from "./declarations/backend.did.d.ts";
@@ -165,6 +185,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.assignCallerUserRole(arg0, to_candid_UserRole_n1(this._uploadFile, this._downloadFile, arg1));
+            return result;
+        }
+    }
+    async chatWithAI(arg0: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.chatWithAI(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.chatWithAI(arg0);
             return result;
         }
     }
@@ -266,17 +300,17 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async initialize(): Promise<void> {
+    async initializeTouristPlaces(): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.initialize();
+                const result = await this.actor.initializeTouristPlaces();
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.initialize();
+            const result = await this.actor.initializeTouristPlaces();
             return result;
         }
     }
@@ -305,6 +339,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.saveMyItinerary(arg0);
+            return result;
+        }
+    }
+    async transform(arg0: TransformationInput): Promise<TransformationOutput> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.transform(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.transform(arg0);
             return result;
         }
     }

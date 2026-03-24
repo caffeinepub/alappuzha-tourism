@@ -23,13 +23,29 @@ export interface TouristPlace {
   'imageUrl' : string,
   'category' : string,
 }
+export interface TransformationInput {
+  'context' : Uint8Array,
+  'response' : http_request_result,
+}
+export interface TransformationOutput {
+  'status' : bigint,
+  'body' : Uint8Array,
+  'headers' : Array<http_header>,
+}
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
+export interface http_header { 'value' : string, 'name' : string }
+export interface http_request_result {
+  'status' : bigint,
+  'body' : Uint8Array,
+  'headers' : Array<http_header>,
+}
 export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
   'addTouristPlace' : ActorMethod<[TouristPlace], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'chatWithAI' : ActorMethod<[string], string>,
   'clearMyItinerary' : ActorMethod<[], undefined>,
   'deleteTouristPlace' : ActorMethod<[bigint], undefined>,
   'getAllTouristPlaces' : ActorMethod<[], Array<TouristPlace>>,
@@ -37,9 +53,10 @@ export interface _SERVICE {
   'getMyItinerary' : ActorMethod<[], Array<Array<ItineraryDayLabel>>>,
   'getPlacesByCategory' : ActorMethod<[string], Array<TouristPlace>>,
   'getTouristPlace' : ActorMethod<[bigint], TouristPlace>,
-  'initialize' : ActorMethod<[], undefined>,
+  'initializeTouristPlaces' : ActorMethod<[], undefined>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'saveMyItinerary' : ActorMethod<[Array<Array<ItineraryDayLabel>>], undefined>,
+  'transform' : ActorMethod<[TransformationInput], TransformationOutput>,
   'updateTouristPlace' : ActorMethod<[TouristPlace], undefined>,
 }
 export declare const idlService: IDL.ServiceClass;
