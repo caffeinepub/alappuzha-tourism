@@ -4,8 +4,6 @@ import Nat "mo:core/Nat";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Order "mo:core/Order";
-import Array "mo:core/Array";
-import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
 
 actor {
@@ -15,8 +13,8 @@ actor {
   // Itineraries mapped to users
   let itineraries = Map.empty<Principal, [[ItineraryDayLabel]]>();
 
+  // Kept for stable variable compatibility with previous version
   let accessControlState = AccessControl.initState();
-  include MixinAuthorization(accessControlState);
 
   type TouristPlace = {
     id : Nat;
@@ -40,11 +38,7 @@ actor {
   };
 
   // Initialize with predefined places
-  public shared ({ caller }) func initialize() : async () {
-    if (not (AccessControl.isAdmin(accessControlState, caller))) {
-      Runtime.trap("Unauthorized: Only admins can initialize places");
-    };
-
+  public shared func initialize() : async () {
     if (touristPlaces.size() > 0) {
       Runtime.trap("Tourist places already initialized");
     };
@@ -128,41 +122,32 @@ actor {
   };
 
   // Tourist Places CRUD
-  public query ({ caller }) func getAllTouristPlaces() : async [TouristPlace] {
+  public query func getAllTouristPlaces() : async [TouristPlace] {
     touristPlaces.values().toArray().sort(TouristPlace.compareById);
   };
 
-  public query ({ caller }) func getTouristPlace(id : Nat) : async TouristPlace {
+  public query func getTouristPlace(id : Nat) : async TouristPlace {
     switch (touristPlaces.get(id)) {
       case (null) { Runtime.trap("Tourist place not found") };
       case (?place) { place };
     };
   };
 
-  public shared ({ caller }) func addTouristPlace(place : TouristPlace) : async () {
-    if (not (AccessControl.isAdmin(accessControlState, caller))) {
-      Runtime.trap("Unauthorized: Only admins can add places");
-    };
+  public shared func addTouristPlace(place : TouristPlace) : async () {
     if (touristPlaces.containsKey(place.id)) {
       Runtime.trap("Place with this ID already exists");
     };
     touristPlaces.add(place.id, place);
   };
 
-  public shared ({ caller }) func updateTouristPlace(place : TouristPlace) : async () {
-    if (not (AccessControl.isAdmin(accessControlState, caller))) {
-      Runtime.trap("Unauthorized: Only admins can update places");
-    };
+  public shared func updateTouristPlace(place : TouristPlace) : async () {
     if (not touristPlaces.containsKey(place.id)) {
       Runtime.trap("Place not found");
     };
     touristPlaces.add(place.id, place);
   };
 
-  public shared ({ caller }) func deleteTouristPlace(id : Nat) : async () {
-    if (not (AccessControl.isAdmin(accessControlState, caller))) {
-      Runtime.trap("Unauthorized: Only admins can delete places");
-    };
+  public shared func deleteTouristPlace(id : Nat) : async () {
     if (not touristPlaces.containsKey(id)) {
       Runtime.trap("Place not found");
     };
@@ -171,9 +156,6 @@ actor {
 
   // Itinerary Management
   public query ({ caller }) func getMyItinerary() : async [[ItineraryDayLabel]] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can access itineraries");
-    };
     switch (itineraries.get(caller)) {
       case (null) { [] };
       case (?itinerary) { itinerary };
@@ -181,21 +163,15 @@ actor {
   };
 
   public shared ({ caller }) func saveMyItinerary(itinerary : [[ItineraryDayLabel]]) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can save itineraries");
-    };
     itineraries.add(caller, itinerary);
   };
 
   public shared ({ caller }) func clearMyItinerary() : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can clear itineraries");
-    };
     itineraries.remove(caller);
   };
 
   // Place Filtering
-  public query ({ caller }) func getPlacesByCategory(category : Text) : async [TouristPlace] {
+  public query func getPlacesByCategory(category : Text) : async [TouristPlace] {
     touristPlaces.values().toArray().filter(
       func(place) {
         Text.equal(place.category, category);

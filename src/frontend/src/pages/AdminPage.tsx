@@ -27,7 +27,6 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   BedDouble,
@@ -35,24 +34,20 @@ import {
   CheckCircle,
   Edit,
   Loader2,
-  LogIn,
   MapPin,
   Plus,
-  ShieldAlert,
   ShieldCheck,
   Trash2,
   UtensilsCrossed,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
+import type { FormEvent } from "react";
 import { toast } from "sonner";
-import { useActor } from "../hooks/useActor";
-import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useAddTouristPlace,
   useAllTouristPlaces,
   useDeleteTouristPlace,
-  useIsCallerAdmin,
   useUpdateTouristPlace,
 } from "../hooks/useQueries";
 import type { TouristPlace } from "../hooks/useQueries";
@@ -138,9 +133,12 @@ const EMPTY_TRANSPORT_FORM: TransportFormState = {
 };
 
 export default function AdminPage() {
-  const { identity, login, isLoggingIn, isInitializing } =
-    useInternetIdentity();
-  const { data: isAdmin, isLoading: checkingAdmin } = useIsCallerAdmin();
+  const [passwordUnlocked, setPasswordUnlocked] = useState(
+    () => sessionStorage.getItem("adminAuth") === "ok",
+  );
+  const [passwordInput, setPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+
   const { data: places, isLoading: loadingPlaces } = useAllTouristPlaces();
   const addPlace = useAddTouristPlace();
   const updatePlace = useUpdateTouristPlace();
@@ -196,26 +194,19 @@ export default function AdminPage() {
   const [transportFormSuccess, setTransportFormSuccess] = useState(false);
   const [transportFormError, setTransportFormError] = useState("");
 
-  const [adminToken, setAdminToken] = useState("");
-  const [claimingAdmin, setClaimingAdmin] = useState(false);
-  const [claimError, setClaimError] = useState("");
-  const queryClient = useQueryClient();
-  const { actor } = useActor();
+  const handlePasswordSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (passwordInput === "joshua") {
+      sessionStorage.setItem("adminAuth", "ok");
+      setPasswordUnlocked(true);
+      setPasswordError("");
+    } else {
+      setPasswordError("Incorrect password. Please try again.");
+      setPasswordInput("");
+    }
+  };
 
-  const isLoggedIn = !!identity;
-
-  if (isInitializing) {
-    return (
-      <div
-        data-ocid="admin.loading_state"
-        className="min-h-screen bg-water-mesh flex items-center justify-center"
-      >
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!isLoggedIn) {
+  if (!passwordUnlocked) {
     return (
       <div className="min-h-screen bg-water-mesh flex items-center justify-center px-4">
         <motion.div
@@ -228,119 +219,38 @@ export default function AdminPage() {
             <ShieldCheck className="w-8 h-8 text-primary" />
           </div>
           <h2 className="font-display text-2xl font-bold text-foreground mb-2">
-            Admin Sign In
+            Admin Access
           </h2>
           <p className="text-muted-foreground text-sm mb-7">
-            Sign in with Internet Identity to access the admin control panel.
+            Enter the admin password to continue.
           </p>
-          <Button
-            data-ocid="admin.signin_button"
-            onClick={login}
-            disabled={isLoggingIn}
-            className="w-full gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
-            size="lg"
-          >
-            {isLoggingIn ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <LogIn className="w-4 h-4" />
-            )}
-            {isLoggingIn ? "Signing in..." : "Sign In with Internet Identity"}
-          </Button>
-        </motion.div>
-      </div>
-    );
-  }
-
-  if (checkingAdmin) {
-    return (
-      <div
-        data-ocid="admin.loading_state"
-        className="min-h-screen bg-water-mesh flex items-center justify-center"
-      >
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  const handleClaimAdmin = async () => {
-    if (!actor || !adminToken.trim()) return;
-    setClaimingAdmin(true);
-    setClaimError("");
-    try {
-      await actor._initializeAccessControlWithSecret(adminToken.trim());
-      await queryClient.invalidateQueries({ queryKey: ["isAdmin"] });
-      toast.success("Admin access granted! Welcome.");
-    } catch {
-      setClaimError("Invalid token. Please check and try again.");
-    } finally {
-      setClaimingAdmin(false);
-    }
-  };
-
-  if (!isAdmin) {
-    return (
-      <div className="min-h-screen bg-water-mesh flex items-center justify-center px-4">
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="w-full max-w-md"
-        >
-          <div className="bg-card border border-border rounded-2xl shadow-lg p-8 text-center">
-            <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-5">
-              <ShieldAlert className="w-8 h-8 text-amber-600" />
-            </div>
-            <h2 className="font-display text-2xl font-bold text-foreground mb-2">
-              Claim Admin Access
-            </h2>
-            <p className="text-muted-foreground text-sm mb-6">
-              Your account is not yet registered as an admin. Enter the admin
-              token to claim administrator privileges.
-            </p>
-            <div className="space-y-3 text-left">
-              <Label htmlFor="admin-token">Admin Token</Label>
-              <Input
-                id="admin-token"
-                type="password"
-                placeholder="Enter admin token..."
-                value={adminToken}
-                onChange={(e) => {
-                  setAdminToken(e.target.value);
-                  setClaimError("");
-                }}
-                onKeyDown={(e) => e.key === "Enter" && handleClaimAdmin()}
-                data-ocid="admin.input"
-              />
-              {claimError && (
-                <p
-                  className="text-destructive text-sm flex items-center gap-1"
-                  data-ocid="admin.error_state"
-                >
-                  <AlertCircle className="w-4 h-4" />
-                  {claimError}
-                </p>
-              )}
-              <Button
-                className="w-full"
-                onClick={handleClaimAdmin}
-                disabled={claimingAdmin || !adminToken.trim()}
-                data-ocid="admin.primary_button"
+          <form onSubmit={handlePasswordSubmit} className="space-y-4">
+            <Input
+              data-ocid="admin.password.input"
+              type="password"
+              placeholder="Password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              className="text-center"
+              autoFocus
+            />
+            {passwordError && (
+              <p
+                data-ocid="admin.password.error_state"
+                className="text-destructive text-sm"
               >
-                {claimingAdmin ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Verifying...
-                  </>
-                ) : (
-                  <>
-                    <ShieldCheck className="mr-2 h-4 w-4" />
-                    Claim Admin Access
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
+                {passwordError}
+              </p>
+            )}
+            <Button
+              data-ocid="admin.password.submit_button"
+              type="submit"
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+              size="lg"
+            >
+              Enter
+            </Button>
+          </form>
         </motion.div>
       </div>
     );
@@ -378,7 +288,7 @@ export default function AdminPage() {
     setPlaceFormSuccess(false);
   };
 
-  const handlePlaceSubmit = async (e: React.FormEvent) => {
+  const handlePlaceSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setPlaceFormError("");
     setPlaceFormSuccess(false);
@@ -462,7 +372,7 @@ export default function AdminPage() {
     setRestaurantFormSuccess(false);
   };
 
-  const handleRestaurantSubmit = (e: React.FormEvent) => {
+  const handleRestaurantSubmit = (e: FormEvent) => {
     e.preventDefault();
     setRestaurantFormError("");
     setRestaurantFormSuccess(false);
@@ -531,7 +441,7 @@ export default function AdminPage() {
     setStayFormSuccess(false);
   };
 
-  const handleStaySubmit = (e: React.FormEvent) => {
+  const handleStaySubmit = (e: FormEvent) => {
     e.preventDefault();
     setStayFormError("");
     setStayFormSuccess(false);
@@ -603,7 +513,7 @@ export default function AdminPage() {
     setTransportFormSuccess(false);
   };
 
-  const handleTransportSubmit = (e: React.FormEvent) => {
+  const handleTransportSubmit = (e: FormEvent) => {
     e.preventDefault();
     setTransportFormError("");
     setTransportFormSuccess(false);
