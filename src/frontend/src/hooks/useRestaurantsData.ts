@@ -7,9 +7,26 @@ export interface Restaurant {
   rating: number;
   description: string;
   specialty: string;
+  imageUrl?: string;
 }
 
 const STORAGE_KEY = "alappuzha_restaurants";
+
+const CUISINE_IMAGES: Record<string, string> = {
+  Seafood: "/assets/generated/restaurant-seafood.dim_600x400.jpg",
+  Kerala: "/assets/generated/restaurant-kerala.dim_600x400.jpg",
+  Vegetarian: "/assets/generated/restaurant-veg.dim_600x400.jpg",
+  "Multi-cuisine": "/assets/generated/restaurant-multi.dim_600x400.jpg",
+  Café: "/assets/generated/restaurant-cafe.dim_600x400.jpg",
+};
+
+export function getRestaurantImage(restaurant: Restaurant): string {
+  if (restaurant.imageUrl?.startsWith("/assets")) return restaurant.imageUrl;
+  return (
+    CUISINE_IMAGES[restaurant.cuisine] ??
+    "/assets/generated/restaurant-kerala.dim_600x400.jpg"
+  );
+}
 
 const DEFAULTS: Restaurant[] = [
   {

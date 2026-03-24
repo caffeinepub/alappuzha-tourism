@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ExternalLink, MapPin } from "lucide-react";
@@ -17,7 +16,32 @@ const categoryColors: Record<string, string> = {
   Culture: "bg-purple-100 text-purple-800 border-purple-200",
   Temple: "bg-orange-100 text-orange-800 border-orange-200",
   Island: "bg-cyan-100 text-cyan-800 border-cyan-200",
+  Lake: "bg-blue-100 text-blue-800 border-blue-200",
+  Sanctuary: "bg-green-100 text-green-800 border-green-200",
+  Palace: "bg-yellow-100 text-yellow-800 border-yellow-200",
 };
+
+const categoryImages: Record<string, string> = {
+  Backwaters: "/assets/generated/place-houseboat.dim_600x400.jpg",
+  Lake: "/assets/generated/place-punnamada.dim_600x400.jpg",
+  Beach: "/assets/generated/place-beach.dim_600x400.jpg",
+  Heritage: "/assets/generated/place-church.dim_600x400.jpg",
+  Palace: "/assets/generated/place-palace.dim_600x400.jpg",
+  Temple: "/assets/generated/place-temple.dim_600x400.jpg",
+  Nature: "/assets/generated/place-paddy.dim_600x400.jpg",
+  Culture: "/assets/generated/place-culture.dim_600x400.jpg",
+  Island: "/assets/generated/place-island.dim_600x400.jpg",
+  Sanctuary: "/assets/generated/place-island.dim_600x400.jpg",
+};
+
+const DEFAULT_IMAGE = "/assets/generated/alappuzha-hero.dim_1600x900.jpg";
+
+function getImageUrl(imageUrl: string | undefined, category: string): string {
+  if (imageUrl?.startsWith("/assets")) {
+    return imageUrl;
+  }
+  return categoryImages[category] ?? DEFAULT_IMAGE;
+}
 
 function getCategoryStyle(category: string) {
   return (
@@ -27,8 +51,7 @@ function getCategoryStyle(category: string) {
 
 export default function PlaceCard({ place, index }: PlaceCardProps) {
   const ocidIndex = index + 1;
-  const imageUrl =
-    place.imageUrl || "/assets/generated/hero-alappuzha.dim_1400x700.jpg";
+  const imageUrl = getImageUrl(place.imageUrl, place.category);
 
   return (
     <Card
@@ -43,7 +66,7 @@ export default function PlaceCard({ place, index }: PlaceCardProps) {
           loading="lazy"
           onError={(e) => {
             (e.target as HTMLImageElement).src =
-              "/assets/generated/hero-alappuzha.dim_1400x700.jpg";
+              categoryImages[place.category] ?? DEFAULT_IMAGE;
           }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />

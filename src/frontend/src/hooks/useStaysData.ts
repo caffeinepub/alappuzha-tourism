@@ -21,7 +21,7 @@ const DEFAULTS: StayItem[] = [
     description:
       "A premium luxury houseboat cruising Punnamada Lake with AC bedrooms, sundeck, and chef-cooked Kerala meals.",
     amenities: ["AC Bedrooms", "Private Chef", "Sundeck", "Wi-Fi"],
-    imageUrl: "/assets/generated/place-houseboat.dim_600x400.jpg",
+    imageUrl: "/assets/generated/stay-houseboat-luxury.dim_600x400.jpg",
   },
   {
     name: "Alleppey Floating Dreams",
@@ -31,7 +31,7 @@ const DEFAULTS: StayItem[] = [
     description:
       "Traditional Kerala kettuvallam converted into a cozy 2-bedroom floating home with panoramic backwater views.",
     amenities: ["2 Bedrooms", "Kitchen", "Deck", "Fishing"],
-    imageUrl: "/assets/generated/place-punnamada.dim_600x400.jpg",
+    imageUrl: "/assets/generated/place-houseboat.dim_600x400.jpg",
   },
   {
     name: "Budget Backwater Cruise",
@@ -41,7 +41,7 @@ const DEFAULTS: StayItem[] = [
     description:
       "An affordable houseboat experience with basic amenities, ideal for budget travelers wanting to experience the backwaters.",
     amenities: ["Fan Rooms", "Meals Included", "Shared Deck"],
-    imageUrl: "/assets/generated/place-island.dim_600x400.jpg",
+    imageUrl: "/assets/generated/place-punnamada.dim_600x400.jpg",
   },
   {
     name: "Marari Beach Resort",
@@ -51,7 +51,7 @@ const DEFAULTS: StayItem[] = [
     description:
       "An award-winning eco-resort on Marari beach with private beach access, Ayurvedic spa, and organic garden.",
     amenities: ["Private Beach", "Spa", "Pool", "Ayurveda"],
-    imageUrl: "/assets/generated/place-marari.dim_600x400.jpg",
+    imageUrl: "/assets/generated/stay-marari-resort.dim_600x400.jpg",
   },
   {
     name: "Alappuzha Beach Hotel",
@@ -61,7 +61,7 @@ const DEFAULTS: StayItem[] = [
     description:
       "A modern seafront hotel steps from Alappuzha Beach with sea-view rooms, rooftop dining, and tour desk.",
     amenities: ["Sea View", "Rooftop Dining", "Tour Desk", "Wi-Fi"],
-    imageUrl: "/assets/generated/place-beach.dim_600x400.jpg",
+    imageUrl: "/assets/generated/stay-beach-hotel.dim_600x400.jpg",
   },
   {
     name: "Vembanad Lakeshore Resort",
@@ -71,7 +71,7 @@ const DEFAULTS: StayItem[] = [
     description:
       "A serene lakeside resort with water-facing cottages, sunrise kayaking, and authentic Kerala cuisine.",
     amenities: ["Lake View", "Kayaking", "Pool", "Restaurant"],
-    imageUrl: "/assets/generated/place-houseboat.dim_600x400.jpg",
+    imageUrl: "/assets/generated/stay-lakeshore-resort.dim_600x400.jpg",
   },
   {
     name: "Green Palms Homestay",
@@ -81,7 +81,7 @@ const DEFAULTS: StayItem[] = [
     description:
       "A family-run homestay surrounded by coconut groves, offering home-cooked Keralan meals and bicycle tours.",
     amenities: ["Home Meals", "Bicycles", "Garden", "Wi-Fi"],
-    imageUrl: "/assets/generated/place-punnamada.dim_600x400.jpg",
+    imageUrl: "/assets/generated/stay-homestay.dim_600x400.jpg",
   },
   {
     name: "Backwater Village Homestay",
@@ -101,7 +101,7 @@ const DEFAULTS: StayItem[] = [
     description:
       "A restored colonial bungalow in the heart of Alappuzha town, offering characterful rooms and a garden café.",
     amenities: ["Garden Café", "Heritage Rooms", "Wi-Fi"],
-    imageUrl: "/assets/generated/place-church.dim_600x400.jpg",
+    imageUrl: "/assets/generated/stay-heritage-bungalow.dim_600x400.jpg",
   },
   {
     name: "Kuttanad Eco Retreat",
@@ -111,7 +111,7 @@ const DEFAULTS: StayItem[] = [
     description:
       "A sustainable eco-retreat in the paddy fields of Kuttanad with treehouse rooms, bullock cart rides, and birdwatching.",
     amenities: ["Treehouse Rooms", "Birdwatching", "Eco Pool", "Organic Food"],
-    imageUrl: "/assets/generated/place-marari.dim_600x400.jpg",
+    imageUrl: "/assets/generated/stay-eco-retreat.dim_600x400.jpg",
   },
 ];
 
@@ -119,7 +119,23 @@ export function useStaysData() {
   const [items, setItems] = useState<StayItem[]>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : DEFAULTS;
+      if (stored) {
+        // Reset to defaults to pick up new images
+        const parsed: StayItem[] = JSON.parse(stored);
+        // If stored data uses old place- images for stays, reset to defaults
+        const usesOldImages = parsed.some(
+          (s) =>
+            s.imageUrl === "/assets/generated/place-paddy.dim_600x400.jpg" ||
+            s.imageUrl === "/assets/generated/place-palace.dim_600x400.jpg" ||
+            (s.category === "Houseboat" &&
+              s.name === "Punnamada Lake Houseboat" &&
+              s.imageUrl !==
+                "/assets/generated/stay-houseboat-luxury.dim_600x400.jpg"),
+        );
+        if (usesOldImages) return DEFAULTS;
+        return parsed;
+      }
+      return DEFAULTS;
     } catch {
       return DEFAULTS;
     }

@@ -25,7 +25,7 @@ export default function HomePage({ navigate }: HomePageProps) {
       {/* Hero Section */}
       <section className="relative h-[88vh] min-h-[560px] overflow-hidden">
         <img
-          src="/assets/generated/hero-alappuzha.dim_1400x700.jpg"
+          src="/assets/generated/alappuzha-hero.dim_1600x900.jpg"
           alt="Alappuzha Backwaters"
           className="absolute inset-0 w-full h-full object-cover"
         />
@@ -259,7 +259,7 @@ export const SAMPLE_PLACES = [
       "The venue of the famous Nehru Trophy Boat Race, where snake boats race across sparkling waters every August.",
     category: "Backwaters",
     mapsUrl: "https://maps.google.com/?q=Punnamada+Lake+Kerala",
-    imageUrl: "/assets/generated/place-punnamada.dim_600x400.jpg",
+    imageUrl: "/assets/generated/place-culture.dim_600x400.jpg",
   },
   {
     id: BigInt(4),
@@ -295,7 +295,7 @@ export const SAMPLE_PLACES = [
       "The longest lake in India stretching across three districts, offering serene boat rides, bird watching, and stunning sunrises over misty waters.",
     category: "Backwaters",
     mapsUrl: "https://maps.google.com/?q=Vembanad+Lake+Kerala",
-    imageUrl: "/assets/generated/place-houseboat.dim_600x400.jpg",
+    imageUrl: "/assets/generated/place-punnamada.dim_600x400.jpg",
   },
   {
     id: BigInt(8),
@@ -304,7 +304,7 @@ export const SAMPLE_PLACES = [
       "The rice bowl of Kerala — vast emerald paddy fields cultivated below sea level, creating a surreal landscape unique in Asia.",
     category: "Nature",
     mapsUrl: "https://maps.google.com/?q=Kuttanad+Kerala",
-    imageUrl: "/assets/generated/place-punnamada.dim_600x400.jpg",
+    imageUrl: "/assets/generated/place-paddy.dim_600x400.jpg",
   },
   {
     id: BigInt(9),
@@ -313,7 +313,7 @@ export const SAMPLE_PLACES = [
       "A 14th-century temple famous for its mythical palpayasam (sweet rice porridge) and magnificent Dravidian architecture.",
     category: "Temple",
     mapsUrl: "https://maps.google.com/?q=Ambalappuzha+Sri+Krishna+Temple",
-    imageUrl: "/assets/generated/place-church.dim_600x400.jpg",
+    imageUrl: "/assets/generated/place-temple.dim_600x400.jpg",
   },
   {
     id: BigInt(10),
@@ -322,7 +322,7 @@ export const SAMPLE_PLACES = [
       "An 18th-century Kerala-style palace museum housing rare murals, sculptures, and antiques. Home to the famous Gajendra Moksham mural.",
     category: "Heritage",
     mapsUrl: "https://maps.google.com/?q=Krishnapuram+Palace+Kerala",
-    imageUrl: "/assets/generated/place-church.dim_600x400.jpg",
+    imageUrl: "/assets/generated/place-palace.dim_600x400.jpg",
   },
   {
     id: BigInt(11),
@@ -331,7 +331,7 @@ export const SAMPLE_PLACES = [
       "A picturesque village known for its magnificent water processions, snake boat races, and the oldest Christian church in Kerala.",
     category: "Culture",
     mapsUrl: "https://maps.google.com/?q=Champakulam+Kerala",
-    imageUrl: "/assets/generated/place-punnamada.dim_600x400.jpg",
+    imageUrl: "/assets/generated/place-culture.dim_600x400.jpg",
   },
   {
     id: BigInt(12),
@@ -340,7 +340,7 @@ export const SAMPLE_PLACES = [
       "A unique forest temple dedicated to serpent gods, surrounded by a dense grove of ancient trees and over 30,000 serpent idols.",
     category: "Temple",
     mapsUrl: "https://maps.google.com/?q=Mannarasala+Temple+Kerala",
-    imageUrl: "/assets/generated/place-church.dim_600x400.jpg",
+    imageUrl: "/assets/generated/place-temple.dim_600x400.jpg",
   },
   {
     id: BigInt(13),
@@ -358,6 +358,6 @@ export const SAMPLE_PLACES = [
       "A world-class private museum displaying rare glass artifacts, antique European furniture, Venetian glass, and priceless ivory carvings.",
     category: "Heritage",
     mapsUrl: "https://maps.google.com/?q=Revi+Karunakaran+Museum+Alappuzha",
-    imageUrl: "/assets/generated/place-church.dim_600x400.jpg",
+    imageUrl: "/assets/generated/place-palace.dim_600x400.jpg",
   },
 ];

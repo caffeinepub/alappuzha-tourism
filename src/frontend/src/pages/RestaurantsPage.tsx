@@ -18,7 +18,10 @@ import { CheckCircle, Star, UtensilsCrossed } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import type { Restaurant } from "../hooks/useRestaurantsData";
-import { useRestaurantsData } from "../hooks/useRestaurantsData";
+import {
+  getRestaurantImage,
+  useRestaurantsData,
+} from "../hooks/useRestaurantsData";
 
 type Cuisine =
   | "All"
@@ -167,6 +170,7 @@ export default function RestaurantsPage() {
           >
             {filtered.map((restaurant, i) => {
               const globalIdx = RESTAURANTS.indexOf(restaurant) + 1;
+              const imgSrc = getRestaurantImage(restaurant);
               return (
                 <motion.article
                   key={restaurant.name}
@@ -177,12 +181,15 @@ export default function RestaurantsPage() {
                   transition={{ duration: 0.4, delay: i * 0.05 }}
                   className="bg-card rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-shadow border border-border group flex flex-col"
                 >
-                  {/* Color band by cuisine */}
-                  <div className="h-3 bg-primary" />
-
-                  <div className="p-5 flex flex-col gap-3 flex-1">
-                    {/* Badges */}
-                    <div className="flex flex-wrap gap-2">
+                  {/* Image */}
+                  <div className="relative h-44 overflow-hidden">
+                    <img
+                      src={imgSrc}
+                      alt={restaurant.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                    <div className="absolute top-3 left-3 flex gap-2">
                       <span
                         className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${CUISINE_COLORS[restaurant.cuisine]}`}
                       >
@@ -194,7 +201,9 @@ export default function RestaurantsPage() {
                         {restaurant.priceRange}
                       </span>
                     </div>
+                  </div>
 
+                  <div className="p-5 flex flex-col gap-3 flex-1">
                     <div>
                       <h3 className="font-display font-semibold text-lg text-foreground leading-snug mb-1">
                         {restaurant.name}
