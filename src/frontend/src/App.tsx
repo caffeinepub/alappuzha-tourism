@@ -41,7 +41,7 @@ export default function App() {
       </main>
       <Footer />
       <Toaster richColors position="top-right" />
-      <ChatbotWidget navigate={navigate} />
+      <ChatbotWidget />
     </div>
   );
 }

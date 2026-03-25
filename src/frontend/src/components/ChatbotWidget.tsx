@@ -2,591 +2,665 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Bot,
-  Calculator,
-  MapPin,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Maximize2,
   MessageCircle,
+  Mic,
+  MicOff,
+  Minimize2,
+  RefreshCw,
   Send,
   Sparkles,
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
-import type { Page } from "../App";
+import {
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+// ─── Gemini API Setup ────────────────────────────────────────────────────────
 
 const GEMINI_API_KEY = "AIzaSyDVkr9yIxvVYeEzhzf8YGCY1kIX5AqWwAA";
-// Use stable v1 endpoint with current model names
 const GEMINI_MODELS = [
   "gemini-1.5-flash",
   "gemini-1.5-flash-8b",
   "gemini-1.5-pro",
 ];
-const SYSTEM_INSTRUCTION = `You are a highly intelligent AI travel assistant for Alappuzha (Alleppey), Kerala, India — designed to be as helpful and natural as ChatGPT.
 
-Capabilities:
-- Natural, human-like conversation with full context awareness
-- Provide detailed, logical, and accurate answers about Alappuzha
-- Solve travel planning problems step-by-step
-- Generate creative content (captions, itineraries, packing lists, travel stories)
-- Assist with budgeting, booking tips, local culture, food, transport, houseboats, and nearby attractions
+const BASE_SYSTEM_INSTRUCTION = `You are an expert AI travel assistant for Alappuzha (Alleppey), Kerala, India. You have deep knowledge of:
+- Tourist places: backwaters, beaches, temples, museums, festivals (Nehru Trophy Boat Race, Onam)
+- Houseboats: types, pricing (₹5,000–₹20,000/night), booking tips, best routes
+- Accommodation: hotels, resorts, homestays, budget guesthouses
+- Food: Kerala cuisine, seafood, local restaurants, must-try dishes (fish curry, karimeen, appam)
+- Transport: trains (Alappuzha railway station), buses, autos, boat services, ferries
+- Budget planning: budget/mid-range/luxury options with INR estimates
+- Itinerary planning: 1-day to 7-day detailed schedules
+- Best time: October–March (peak season), monsoon charm June–September
+- Nearby attractions: Kochi (85km), Kollam, Kumarakom
 
-Tone & Style:
-- Friendly, conversational, and professional
-- Adapt tone based on the user (formal or informal)
-- Keep explanations simple but meaningful
+You also handle general queries (coding, academics, casual chat) with a helpful ChatGPT-like tone.
 
 Rules:
-- Never provide harmful or illegal content
-- If unsure about something, say so honestly — do not hallucinate facts
-- Be concise but thorough — avoid unnecessary filler
+- Be concise but comprehensive. Use bullet points and structure.
+- Always give practical, actionable advice.
+- For bookings, suggest Booking.com or MakeMyTrip.
+- Avoid harmful/illegal content.
+- If unsure, say so honestly.`;
 
-Output Formatting:
-- Use bullet points when listing multiple items
-- Use bold text (**like this**) for key terms and headings
-- Use examples when helpful
-- Structure longer answers with clear sections
-- For itineraries or step-by-step plans, use numbered lists
+interface GeminiContent {
+  role: "user" | "model";
+  parts: { text: string }[];
+}
 
-Focus areas: places to visit, houseboat bookings, local food, transport options, weather and best time to visit, festivals, budget planning, safety tips, nearby day trips, and authentic local experiences in Alappuzha.`;
-
-async function callGeminiAPI(
+async function callGemini(
   model: string,
-  contents: { role: string; parts: { text: string }[] }[],
+  contents: GeminiContent[],
+  systemInstruction: string,
 ): Promise<string> {
-  // Use stable v1 endpoint
   const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
-  const body = {
-    systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
-    contents,
-    generationConfig: {
-      maxOutputTokens: 1024,
-      temperature: 0.7,
-    },
-  };
-
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
-
+  const timer = setTimeout(() => controller.abort(), 25000);
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
       signal: controller.signal,
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        contents,
+        generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
+      }),
     });
-
-    clearTimeout(timeout);
-
+    clearTimeout(timer);
     if (!res.ok) {
-      const errText = await res.text();
-      console.error(`Gemini model ${model} error ${res.status}:`, errText);
-      throw new Error(`Gemini API error: ${res.status}`);
+      const err = await res.text();
+      console.error(`[Gemini] ${model} → ${res.status}:`, err);
+      throw new Error(`HTTP ${res.status}`);
     }
-
     const data = await res.json();
-    const candidate = data?.candidates?.[0];
-
-    if (
-      candidate?.finishReason &&
-      candidate.finishReason !== "STOP" &&
-      !candidate.content?.parts?.[0]?.text
-    ) {
-      throw new Error(
-        `Gemini response blocked. Finish reason: ${candidate.finishReason}`,
-      );
-    }
-
-    const text = candidate?.content?.parts?.[0]?.text;
-    if (!text) throw new Error("Empty Gemini response");
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) throw new Error("Empty response");
     return text;
   } catch (err) {
-    clearTimeout(timeout);
+    clearTimeout(timer);
     throw err;
   }
 }
 
-async function getGeminiResponse(
+async function getAIResponse(
   userText: string,
   history: { role: "user" | "bot"; text: string }[],
+  contextTopic: string,
 ): Promise<string> {
-  // Build strictly alternating user/model history (Gemini requirement)
-  const recentHistory = history.slice(-8);
-  const alternating: { role: "user" | "bot"; text: string }[] = [];
-  let lastRole: string | null = null;
-  for (const m of recentHistory) {
+  const systemInstruction = contextTopic
+    ? `${BASE_SYSTEM_INSTRUCTION}\n\nContext: The user has been asking about [${contextTopic}]. Tailor your response accordingly.`
+    : BASE_SYSTEM_INSTRUCTION;
+
+  const contents: GeminiContent[] = [];
+  for (const m of history.slice(-10)) {
     const role = m.role === "user" ? "user" : "model";
-    if (role !== lastRole) {
-      alternating.push(m);
-      lastRole = role;
-    }
+    if (contents.length > 0 && contents[contents.length - 1].role === role)
+      continue;
+    contents.push({ role, parts: [{ text: m.text }] });
   }
-  // Gemini requires conversation to start with "user"
-  const trimmed =
-    alternating.length > 0 && alternating[0].role !== "user"
-      ? alternating.slice(1)
-      : alternating;
+  if (contents.length > 0 && contents[0].role !== "user") contents.shift();
+  contents.push({ role: "user", parts: [{ text: userText }] });
 
-  const contents = [
-    ...trimmed.map((m) => ({
-      role: m.role === "user" ? "user" : "model",
-      parts: [{ text: m.text }],
-    })),
-    { role: "user", parts: [{ text: userText }] },
-  ];
-
-  let lastErr: Error | null = null;
   for (const model of GEMINI_MODELS) {
     try {
-      console.log(`Trying Gemini model: ${model}`);
-      const result = await callGeminiAPI(model, contents);
-      console.log(`Success with model: ${model}`);
+      const result = await callGemini(model, contents, systemInstruction);
       return result;
     } catch (err) {
-      console.warn(`Gemini model ${model} failed:`, err);
-      lastErr = err as Error;
+      console.warn(`[Gemini] ${model} failed:`, err);
     }
   }
-  throw lastErr;
+  throw new Error("All Gemini models failed");
 }
 
-const GENERIC_SUGGESTIONS = [
-  "Houseboat tips",
-  "Best places to visit",
-  "Plan my itinerary",
-  "Budget tips",
+// ─── Topic Detection ──────────────────────────────────────────────────────────
+
+const TOPIC_KEYWORDS: Record<string, string[]> = {
+  houseboats: ["houseboat", "backwater", "cruise", "boat", "kettuvallam"],
+  food: [
+    "food",
+    "eat",
+    "restaurant",
+    "cuisine",
+    "dish",
+    "karimeen",
+    "appam",
+    "fish",
+    "seafood",
+    "meal",
+  ],
+  temples: ["temple", "church", "mosque", "shrine", "puja", "festival"],
+  budget: [
+    "budget",
+    "cost",
+    "price",
+    "cheap",
+    "expensive",
+    "money",
+    "rupee",
+    "₹",
+  ],
+  transport: [
+    "train",
+    "bus",
+    "auto",
+    "taxi",
+    "ferry",
+    "reach",
+    "travel",
+    "transport",
+  ],
+  stays: [
+    "hotel",
+    "resort",
+    "homestay",
+    "stay",
+    "accommodation",
+    "room",
+    "book",
+  ],
+  itinerary: ["itinerary", "plan", "schedule", "days", "trip", "tour"],
+  beaches: ["beach", "sea", "coast", "shore", "alappuzha beach"],
+};
+
+function detectTopic(text: string): string {
+  const lower = text.toLowerCase();
+  for (const [topic, keywords] of Object.entries(TOPIC_KEYWORDS)) {
+    if (keywords.some((kw) => lower.includes(kw))) return topic;
+  }
+  return "";
+}
+
+// ─── Follow-up Suggestions ────────────────────────────────────────────────────
+
+const FOLLOWUP_MAP: Record<string, string[]> = {
+  houseboats: [
+    "Book a houseboat?",
+    "Houseboat cost?",
+    "Best houseboat routes?",
+  ],
+  food: ["Best restaurants?", "Must-try dishes?", "Vegetarian options?"],
+  temples: ["Temple timings?", "Dress code?", "Other religious sites?"],
+  budget: ["Budget breakdown?", "Cheap stays?", "Free attractions?"],
+  transport: ["How to reach?", "Local transport options?", "Auto fare?"],
+  stays: ["Best hotels?", "Homestay recommendations?", "Beach resorts?"],
+  itinerary: ["2-day plan?", "Family-friendly spots?", "Adventure options?"],
+  beaches: ["Beach activities?", "Nearest beach?", "Sunset viewpoint?"],
+};
+
+function getFollowups(botText: string): string[] {
+  const lower = botText.toLowerCase();
+  for (const [topic, keywords] of Object.entries(TOPIC_KEYWORDS)) {
+    if (keywords.some((kw) => lower.includes(kw))) {
+      return FOLLOWUP_MAP[topic] || [];
+    }
+  }
+  return ["Tell me more?", "Any tips?", "What's nearby?"];
+}
+
+// ─── Markdown Renderer ────────────────────────────────────────────────────────
+
+function renderMarkdown(text: string): ReactElement {
+  const lines = text.split("\n");
+  const elements: ReactElement[] = [];
+  let listItems: string[] = [];
+  let orderedItems: string[] = [];
+  let keyCounter = 0;
+
+  const flushList = () => {
+    if (listItems.length > 0) {
+      elements.push(
+        <ul
+          key={`ul-${keyCounter++}`}
+          className="list-disc list-inside space-y-0.5 my-1.5 pl-1"
+        >
+          {listItems.map((item, i) => (
+            <li
+              // biome-ignore lint/suspicious/noArrayIndexKey: markdown list items have no stable id
+              key={i}
+              className="text-sm leading-relaxed"
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: safe formatted text
+              dangerouslySetInnerHTML={{ __html: inlineFormat(item) }}
+            />
+          ))}
+        </ul>,
+      );
+      listItems = [];
+    }
+    if (orderedItems.length > 0) {
+      elements.push(
+        <ol
+          key={`ol-${keyCounter++}`}
+          className="list-decimal list-inside space-y-0.5 my-1.5 pl-1"
+        >
+          {orderedItems.map((item, i) => (
+            <li
+              // biome-ignore lint/suspicious/noArrayIndexKey: markdown list items have no stable id
+              key={i}
+              className="text-sm leading-relaxed"
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: safe formatted text
+              dangerouslySetInnerHTML={{ __html: inlineFormat(item) }}
+            />
+          ))}
+        </ol>,
+      );
+      orderedItems = [];
+    }
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      elements.push(<div key={`sp-${keyCounter++}`} className="h-1" />);
+      continue;
+    }
+    if (trimmed.startsWith("### ")) {
+      flushList();
+      elements.push(
+        <p
+          key={`h3-${keyCounter++}`}
+          className="font-semibold text-sm mt-2 mb-0.5"
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: safe formatted text
+          dangerouslySetInnerHTML={{ __html: inlineFormat(trimmed.slice(4)) }}
+        />,
+      );
+    } else if (trimmed.startsWith("## ")) {
+      flushList();
+      elements.push(
+        <p
+          key={`h2-${keyCounter++}`}
+          className="font-bold text-sm mt-2 mb-0.5"
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: safe formatted text
+          dangerouslySetInnerHTML={{ __html: inlineFormat(trimmed.slice(3)) }}
+        />,
+      );
+    } else if (trimmed.startsWith("# ")) {
+      flushList();
+      elements.push(
+        <p
+          key={`h1-${keyCounter++}`}
+          className="font-bold text-base mt-2 mb-1"
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: safe formatted text
+          dangerouslySetInnerHTML={{ __html: inlineFormat(trimmed.slice(2)) }}
+        />,
+      );
+    } else if (trimmed.match(/^[-•*] /)) {
+      if (orderedItems.length > 0) flushList();
+      listItems.push(trimmed.replace(/^[-•*] /, ""));
+    } else if (trimmed.match(/^\d+\. /)) {
+      if (listItems.length > 0) flushList();
+      orderedItems.push(trimmed.replace(/^\d+\. /, ""));
+    } else {
+      flushList();
+      elements.push(
+        <p
+          key={`p-${keyCounter++}`}
+          className="text-sm leading-relaxed"
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: safe formatted text
+          dangerouslySetInnerHTML={{ __html: inlineFormat(trimmed) }}
+        />,
+      );
+    }
+  }
+  flushList();
+  return <div className="space-y-0.5">{elements}</div>;
+}
+
+function inlineFormat(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(
+      /`(.+?)`/g,
+      '<code class="bg-black/10 rounded px-1 text-xs font-mono">$1</code>',
+    );
+}
+
+// ─── Category Tabs ────────────────────────────────────────────────────────────
+
+const CATEGORIES = [
+  {
+    label: "Places",
+    prompt: "Tell me the best places to visit in Alappuzha",
+    emoji: "🏛️",
+  },
+  {
+    label: "Food",
+    prompt: "What are the must-try foods and restaurants in Alappuzha?",
+    emoji: "🍛",
+  },
+  {
+    label: "Stays",
+    prompt: "What are the best accommodation options in Alappuzha?",
+    emoji: "🏨",
+  },
+  {
+    label: "Transport",
+    prompt: "How to reach Alappuzha and what are local transport options?",
+    emoji: "🚢",
+  },
+  {
+    label: "Itinerary",
+    prompt: "Create a 3-day itinerary for Alappuzha",
+    emoji: "📅",
+  },
 ];
 
-interface ChatbotWidgetProps {
-  navigate: (page: Page) => void;
+// ─── Typing Animation Hook ────────────────────────────────────────────────────
+
+function useTypingAnimation(fullText: string, active: boolean) {
+  const [displayed, setDisplayed] = useState("");
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    if (!active || !fullText) {
+      setDisplayed(fullText);
+      setDone(true);
+      return;
+    }
+    setDisplayed("");
+    setDone(false);
+    let idx = 0;
+    const interval = setInterval(() => {
+      idx++;
+      setDisplayed(fullText.slice(0, idx));
+      if (idx >= fullText.length) {
+        clearInterval(interval);
+        setDone(true);
+      }
+    }, 12);
+    return () => clearInterval(interval);
+  }, [fullText, active]);
+
+  return { displayed, done };
 }
+
+// ─── Message Types ────────────────────────────────────────────────────────────
 
 interface Message {
   id: string;
   role: "user" | "bot";
   text: string;
-  suggestions?: string[];
-  navAction?: Page;
-  estimatorResult?: EstimatorResult;
+  timestamp: Date;
+  animate?: boolean;
 }
 
-type EstimatorStep =
-  | null
-  | "days"
-  | "accommodation"
-  | "transport"
-  | "food"
-  | "activities"
-  | "result";
+// ─── Bot Message Component ────────────────────────────────────────────────────
 
-interface EstimatorState {
-  active: boolean;
-  step: EstimatorStep;
-  days?: number;
-  accommodation?: string;
-  transport?: string;
-  food?: string;
-  activities?: string;
-}
+function BotMessage({
+  msg,
+  isLast,
+  onFollowup,
+}: {
+  msg: Message;
+  isLast: boolean;
+  onFollowup: (text: string) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const { displayed, done } = useTypingAnimation(msg.text, !!msg.animate);
+  const followups = isLast && done ? getFollowups(msg.text) : [];
 
-interface EstimatorResult {
-  days: number;
-  accommodation: string;
-  transport: string;
-  food: string;
-  activities: string;
-  accCost: number;
-  transportCost: number;
-  foodCost: number;
-  actCost: number;
-  total: number;
-  totalMax: number;
-}
-
-const ACC_RATES: Record<string, number> = {
-  "Budget homestay": 700,
-  "Mid-range hotel": 3000,
-  "Luxury resort": 8000,
-  Houseboat: 12000,
-};
-const TRANSPORT_RATES: Record<string, number> = {
-  "Public transport": 200,
-  "Auto-rickshaw / taxi": 500,
-  "Rented vehicle": 800,
-};
-const FOOD_RATES: Record<string, number> = {
-  "Street food / local eateries": 250,
-  "Mid-range restaurants": 600,
-  "Fine dining": 1200,
-};
-const ACTIVITY_RATES: Record<string, number> = {
-  "Free / budget activities": 100,
-  "Mix of paid & free": 500,
-  "Houseboat + tours": 1500,
-};
-
-const ESTIMATOR_STEPS: Record<
-  NonNullable<EstimatorStep>,
-  { question: string; chips: string[] }
-> = {
-  days: {
-    question: "🗓️ **How many days** is your trip?",
-    chips: ["1", "2", "3", "4", "5", "6", "7"],
-  },
-  accommodation: {
-    question: "🏡 What type of **accommodation** do you prefer?",
-    chips: ["Budget homestay", "Mid-range hotel", "Luxury resort", "Houseboat"],
-  },
-  transport: {
-    question: "🚌 What's your **transport preference**?",
-    chips: ["Public transport", "Auto-rickshaw / taxi", "Rented vehicle"],
-  },
-  food: {
-    question: "🍛 What's your **food preference**?",
-    chips: [
-      "Street food / local eateries",
-      "Mid-range restaurants",
-      "Fine dining",
-    ],
-  },
-  activities: {
-    question: "🎯 What kind of **activities** are you planning?",
-    chips: [
-      "Free / budget activities",
-      "Mix of paid & free",
-      "Houseboat + tours",
-    ],
-  },
-  result: { question: "", chips: [] },
-};
-
-const STEP_ORDER: EstimatorStep[] = [
-  "days",
-  "accommodation",
-  "transport",
-  "food",
-  "activities",
-  "result",
-];
-
-function computeEstimate(state: EstimatorState): EstimatorResult {
-  const days = state.days ?? 1;
-  const accRate = ACC_RATES[state.accommodation ?? "Budget homestay"] ?? 700;
-  const transRate =
-    TRANSPORT_RATES[state.transport ?? "Public transport"] ?? 200;
-  const foodRate =
-    FOOD_RATES[state.food ?? "Street food / local eateries"] ?? 250;
-  const actRate =
-    ACTIVITY_RATES[state.activities ?? "Free / budget activities"] ?? 100;
-
-  const nights = days;
-  const accCost = accRate * nights;
-  const transportCost = transRate * days;
-  const foodCost = foodRate * days;
-  const actCost = actRate * days;
-  const total = accCost + transportCost + foodCost + actCost;
-  const totalMax = Math.round(total * 1.2);
-
-  return {
-    days,
-    accommodation: state.accommodation ?? "Budget homestay",
-    transport: state.transport ?? "Public transport",
-    food: state.food ?? "Street food / local eateries",
-    activities: state.activities ?? "Free / budget activities",
-    accCost,
-    transportCost,
-    foodCost,
-    actCost,
-    total,
-    totalMax,
+  const copy = () => {
+    navigator.clipboard.writeText(msg.text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   };
-}
 
-function detectEstimatorTrigger(text: string): boolean {
-  return /estimate.*cost|cost.*estimat|trip.*budget|budget.*trip|how much.*trip|trip.*cost|cost.*calculator|estimat.*trip|start.*estimat/.test(
-    text,
-  );
-}
+  const timestamp = msg.timestamp.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
-const INITIAL_QUICK_REPLIES = [
-  "Best places to visit",
-  "Best time to visit",
-  "Food to try",
-  "Houseboat tips",
-  "Getting there",
-  "Nearby attractions",
-  "Trip cost estimator",
-];
-
-interface BotResult {
-  text: string;
-  suggestions?: string[];
-  navAction?: Page;
-}
-
-function fmt(n: number) {
-  return n.toLocaleString("en-IN");
-}
-
-function EstimatorCard({ result }: { result: EstimatorResult }) {
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden text-sm mt-1">
-      <div className="bg-primary/10 px-3.5 py-2.5 flex items-center gap-2">
-        <Calculator className="w-4 h-4 text-primary" />
-        <span className="font-semibold text-foreground">
-          Trip Estimate · {result.days} day{result.days > 1 ? "s" : ""}
-        </span>
+    <div className="flex flex-col gap-1">
+      <div
+        className="flex items-start gap-2"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0 mt-0.5">
+          <Bot className="w-3.5 h-3.5 text-primary-foreground" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="bg-muted text-foreground rounded-2xl rounded-tl-sm px-3.5 py-2.5 relative group max-w-[90%]">
+            {renderMarkdown(displayed)}
+            <AnimatePresence>
+              {hovered && done && (
+                <motion.button
+                  type="button"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  onClick={copy}
+                  className="absolute -top-2.5 -right-2.5 w-6 h-6 bg-background border border-border rounded-full flex items-center justify-center shadow-sm hover:bg-muted transition-colors"
+                  aria-label="Copy message"
+                >
+                  {copied ? (
+                    <Check className="w-3 h-3 text-emerald-500" />
+                  ) : (
+                    <Copy className="w-3 h-3 text-muted-foreground" />
+                  )}
+                </motion.button>
+              )}
+            </AnimatePresence>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-0.5 ml-1">
+            {timestamp}
+          </p>
+        </div>
       </div>
-      <div className="px-3.5 py-2.5 space-y-1.5">
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">🏡 Accommodation</span>
-          <span className="font-medium">₹{fmt(result.accCost)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">🚌 Transport</span>
-          <span className="font-medium">₹{fmt(result.transportCost)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">🍛 Food</span>
-          <span className="font-medium">₹{fmt(result.foodCost)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">🎯 Activities</span>
-          <span className="font-medium">₹{fmt(result.actCost)}</span>
-        </div>
-        <div className="border-t border-border pt-1.5 mt-1 flex justify-between">
-          <span className="font-semibold text-foreground">💰 Total</span>
-          <span className="font-bold text-primary">
-            ₹{fmt(result.total)} – ₹{fmt(result.totalMax)}
-          </span>
-        </div>
-      </div>
+
+      {/* Follow-up chips */}
+      <AnimatePresence>
+        {followups.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="flex flex-wrap gap-1.5 ml-9"
+          >
+            {followups.map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => onFollowup(f)}
+                className="text-[11px] px-2.5 py-1 rounded-full border border-primary/25 text-primary hover:bg-primary hover:text-primary-foreground transition-colors bg-primary/5 font-medium"
+              >
+                {f}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-export default function ChatbotWidget({
-  navigate: _navigate,
-}: ChatbotWidgetProps) {
+// ─── Main Widget ──────────────────────────────────────────────────────────────
+
+const WELCOME: Message = {
+  id: "welcome",
+  role: "bot",
+  text: "👋 Hi! I'm your **Alappuzha AI Travel Guide**, powered by Gemini AI.\n\nAsk me anything about Alappuzha — places to visit, food, houseboats, itineraries, budget tips, and more!",
+  timestamp: new Date(),
+};
+
+export default function ChatbotWidget() {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      role: "bot",
-      text: "👋 Welcome! I'm your **Alappuzha AI Travel Guide**. I can help you plan your trip, discover local food, book stays, and more!\n\nWhat would you like to explore?",
-      suggestions: INITIAL_QUICK_REPLIES,
-    },
-  ]);
-  const [inputValue, setInputValue] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const [estimator, setEstimator] = useState<EstimatorState>({
-    active: false,
-    step: null,
-  });
+  const [expanded, setExpanded] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([WELCOME]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showCategories, setShowCategories] = useState(true);
+  const [contextTopic, setContextTopic] = useState("");
+  const [isListening, setIsListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messageCount = messages.length;
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally using messageCount and isTyping to trigger scroll
+  // Check speech support
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messageCount, isTyping]);
+    const SR =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    setSpeechSupported(!!SR);
+  }, []);
+
+  const msgCount = messages.length;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll when messages or loading changes
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgCount, loading]);
 
   useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
+    if (isOpen) setTimeout(() => inputRef.current?.focus(), 150);
   }, [isOpen]);
 
-  const pushBotMessage = (msg: Omit<Message, "id" | "role">) => {
-    setMessages((prev) => [
-      ...prev,
-      { ...msg, id: `bot-${Date.now()}-${Math.random()}`, role: "bot" },
-    ]);
-  };
+  const sendMessage = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || loading) return;
 
-  const advanceEstimator = (choice: string) => {
-    const current = estimator.step;
-    const currentIdx = STEP_ORDER.indexOf(current);
-    const nextStep = STEP_ORDER[currentIdx + 1] ?? "result";
+      setShowCategories(false);
+      const topic = detectTopic(trimmed);
+      if (topic) setContextTopic(topic);
 
-    const next: EstimatorState = { ...estimator };
-    if (current === "days") next.days = Number.parseInt(choice, 10);
-    else if (current === "accommodation") next.accommodation = choice;
-    else if (current === "transport") next.transport = choice;
-    else if (current === "food") next.food = choice;
-    else if (current === "activities") next.activities = choice;
+      const userMsg: Message = {
+        id: `u${Date.now()}`,
+        role: "user",
+        text: trimmed,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      setInput("");
+      setLoading(true);
 
-    if (nextStep === "result") {
-      next.active = false;
-      next.step = null;
-      const result = computeEstimate(next);
-      setEstimator(next);
-      setIsTyping(false);
-      pushBotMessage({
-        text: "Here's your personalised trip estimate! 🎉",
-        estimatorResult: result,
-        suggestions: [
-          "Open Budget Calculator",
-          "Plan my itinerary",
-          "Book a stay",
-          "Start over",
-        ],
-      });
-    } else {
-      next.step = nextStep;
-      setEstimator(next);
-      const stepInfo = ESTIMATOR_STEPS[nextStep as NonNullable<EstimatorStep>];
-      setIsTyping(false);
-      pushBotMessage({
-        text: stepInfo.question,
-        suggestions: stepInfo.chips,
-      });
-    }
-  };
-
-  const sendMessage = async (text: string) => {
-    if (!text.trim() || isTyping) return;
-
-    if (estimator.active) {
-      const currentChips =
-        ESTIMATOR_STEPS[estimator.step as NonNullable<EstimatorStep>]?.chips ??
-        [];
-      const isValidChip = currentChips.includes(text.trim());
-      if (!isValidChip) {
-        setEstimator({ active: false, step: null });
-      } else {
-        const userMsg: Message = {
-          id: `user-${Date.now()}`,
-          role: "user",
-          text: text.trim(),
-        };
-        setMessages((prev) => [...prev, userMsg]);
-        setInputValue("");
-        setIsTyping(true);
-        setTimeout(() => advanceEstimator(text.trim()), 400);
-        return;
+      try {
+        const history = messages
+          .filter((m) => m.id !== "welcome")
+          .map((m) => ({ role: m.role, text: m.text }));
+        const reply = await getAIResponse(trimmed, history, contextTopic);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `b${Date.now()}`,
+            role: "bot",
+            text: reply,
+            timestamp: new Date(),
+            animate: true,
+          },
+        ]);
+      } catch {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `b${Date.now()}`,
+            role: "bot",
+            text: "Sorry, I'm having trouble connecting. Please check your internet and try again.",
+            timestamp: new Date(),
+          },
+        ]);
+      } finally {
+        setLoading(false);
       }
-    }
+    },
+    [loading, messages, contextTopic],
+  );
 
-    const userMsg: Message = {
-      id: `user-${Date.now()}`,
-      role: "user",
-      text: text.trim(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    setInputValue("");
-    setIsTyping(true);
+  const clearChat = () => {
+    setMessages([{ ...WELCOME, timestamp: new Date() }]);
+    setShowCategories(true);
+    setContextTopic("");
+    setInput("");
+  };
 
-    if (
-      detectEstimatorTrigger(text.toLowerCase()) ||
-      text.toLowerCase() === "trip cost estimator" ||
-      text.toLowerCase() === "start over"
-    ) {
-      const newEst: EstimatorState = { active: true, step: "days" };
-      setEstimator(newEst);
-      setTimeout(() => {
-        setIsTyping(false);
-        pushBotMessage({
-          text: `🧮 **Trip Cost Estimator**\nLet me help you estimate your trip costs! I'll ask you a few quick questions.\n\n${ESTIMATOR_STEPS.days.question}`,
-          suggestions: ESTIMATOR_STEPS.days.chips,
-        });
-      }, 500);
+  const toggleVoice = () => {
+    if (!speechSupported) return;
+    const SR =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
       return;
     }
-
-    // Build conversation history for Gemini (exclude welcome and estimator messages)
-    const history = messages
-      .filter((m) => m.id !== "welcome" && !m.estimatorResult)
-      .map((m) => ({ role: m.role, text: m.text }));
-
-    try {
-      const responseText = await getGeminiResponse(text.trim(), history);
-      setIsTyping(false);
-      pushBotMessage({
-        text: responseText,
-        suggestions: GENERIC_SUGGESTIONS,
-      });
-    } catch (err) {
-      console.error("Gemini error (all models failed):", err);
-      setIsTyping(false);
-      pushBotMessage({
-        text: "Sorry, I couldn't connect to the AI right now. Please check your internet connection and try again.",
-        suggestions: GENERIC_SUGGESTIONS,
-      });
-    }
+    const recognition: any = new SR();
+    recognition.lang = "en-IN";
+    recognition.interimResults = false;
+    recognition.onresult = (e: any) => {
+      const transcript = e.results[0][0].transcript;
+      setInput(transcript);
+      setIsListening(false);
+    };
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    sendMessage(inputValue);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage(inputValue);
-    }
-  };
-
-  const renderText = (text: string) => {
-    return text.split("\n").map((line, i) => {
-      const key = `line-${i}-${line.slice(0, 8)}`;
-      const boldFormatted = line.replace(
-        /\*\*(.+?)\*\*/g,
-        "<strong>$1</strong>",
-      );
-      return (
-        <span key={key}>
-          {/* biome-ignore lint/security/noDangerouslySetInnerHtml: safe formatted text */}
-          <span dangerouslySetInnerHTML={{ __html: boldFormatted }} />
-          {i < text.split("\n").length - 1 && <br />}
-        </span>
-      );
-    });
-  };
-
-  // Suppress unused import warning — BotResult used as return type reference only
-  type _BotResult = BotResult;
+  const panelHeight = expanded ? "min(85vh, 700px)" : "520px";
 
   return (
     <>
-      {/* Floating Button */}
+      {/* Floating button */}
       <AnimatePresence>
         {!isOpen && (
           <motion.button
-            data-ocid="chatbot.open_modal_button"
             type="button"
+            data-ocid="chatbot.open_modal_button"
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
             transition={{ type: "spring", stiffness: 400, damping: 25 }}
             onClick={() => setIsOpen(true)}
             className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
-            aria-label="Open travel guide chat"
+            aria-label="Open AI chat"
           >
             <MessageCircle className="w-6 h-6" />
+            <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-background" />
           </motion.button>
         )}
       </AnimatePresence>
 
-      {/* Chat Panel */}
+      {/* Chat panel */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
+            data-ocid="chatbot.dialog"
             initial={{ opacity: 0, y: 24, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 24, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 400, damping: 30 }}
-            className="fixed bottom-6 right-6 z-50 w-[390px] max-w-[calc(100vw-1.5rem)] flex flex-col rounded-2xl shadow-2xl border border-border overflow-hidden bg-card"
-            style={{ maxHeight: "calc(100vh - 5rem)", height: "600px" }}
+            className="fixed bottom-6 right-6 z-50 w-[400px] max-w-[calc(100vw-1.5rem)] flex flex-col rounded-2xl shadow-2xl border border-border bg-card overflow-hidden"
+            style={{
+              height: panelHeight,
+              maxHeight: "calc(100vh - 5rem)",
+              transition: "height 0.3s ease",
+            }}
           >
             {/* Header */}
-            <div className="bg-primary text-primary-foreground px-4 py-3.5 flex items-center justify-between flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-primary-foreground/15 flex items-center justify-center">
+            <div className="bg-primary text-primary-foreground px-4 py-3 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center">
                   <Sparkles className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="font-display font-semibold text-sm leading-tight">
+                  <p className="font-semibold text-sm leading-tight">
                     Alappuzha AI Guide
                   </p>
                   <div className="flex items-center gap-1.5 mt-0.5">
@@ -594,38 +668,43 @@ export default function ChatbotWidget({
                     <span className="text-xs opacity-70">
                       Powered by Gemini AI
                     </span>
+                    {contextTopic && (
+                      <span className="text-[10px] opacity-60 bg-white/10 rounded-full px-1.5 py-px">
+                        #{contextTopic}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-1">
                 <button
+                  type="button"
                   data-ocid="chatbot.secondary_button"
-                  type="button"
-                  onClick={() => {
-                    setEstimator({ active: false, step: null });
-                    sendMessage("trip cost estimator");
-                  }}
-                  className="w-8 h-8 rounded-full hover:bg-primary-foreground/20 flex items-center justify-center transition-colors"
-                  aria-label="Open trip cost estimator"
-                  title="Trip cost estimator"
+                  onClick={clearChat}
+                  className="w-7 h-7 rounded-full hover:bg-white/20 flex items-center justify-center transition-colors"
+                  aria-label="Clear chat"
+                  title="Clear chat"
                 >
-                  <Calculator className="w-4 h-4" />
+                  <RefreshCw className="w-3.5 h-3.5" />
                 </button>
                 <button
-                  data-ocid="chatbot.toggle"
                   type="button"
-                  onClick={() => sendMessage("Nearby attractions")}
-                  className="w-8 h-8 rounded-full hover:bg-primary-foreground/20 flex items-center justify-center transition-colors"
-                  aria-label="Ask about nearby places"
-                  title="Nearby places"
+                  onClick={() => setExpanded((v) => !v)}
+                  className="w-7 h-7 rounded-full hover:bg-white/20 flex items-center justify-center transition-colors"
+                  aria-label={expanded ? "Collapse chat" : "Expand chat"}
+                  title={expanded ? "Collapse" : "Expand"}
                 >
-                  <MapPin className="w-4 h-4" />
+                  {expanded ? (
+                    <Minimize2 className="w-3.5 h-3.5" />
+                  ) : (
+                    <Maximize2 className="w-3.5 h-3.5" />
+                  )}
                 </button>
                 <button
+                  type="button"
                   data-ocid="chatbot.close_button"
-                  type="button"
                   onClick={() => setIsOpen(false)}
-                  className="w-8 h-8 rounded-full hover:bg-primary-foreground/20 flex items-center justify-center transition-colors"
+                  className="w-7 h-7 rounded-full hover:bg-white/20 flex items-center justify-center transition-colors"
                   aria-label="Close chat"
                 >
                   <X className="w-4 h-4" />
@@ -633,160 +712,169 @@ export default function ChatbotWidget({
               </div>
             </div>
 
-            {/* Estimator step pill */}
-            <AnimatePresence>
-              {estimator.active && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="bg-primary/8 border-b border-primary/15 px-4 py-2 flex items-center justify-between flex-shrink-0"
-                >
-                  <div className="flex items-center gap-2">
-                    <Calculator className="w-3.5 h-3.5 text-primary" />
-                    <span className="text-xs font-medium text-primary">
-                      Cost Estimator — Step{" "}
-                      {STEP_ORDER.indexOf(estimator.step) + 1} of{" "}
-                      {STEP_ORDER.length - 1}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEstimator({ active: false, step: null });
-                      pushBotMessage({
-                        text: "Estimator cancelled. What else can I help you with?",
-                        suggestions: INITIAL_QUICK_REPLIES.slice(0, 4),
-                      });
-                    }}
-                    className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {messages.map((msg) => (
-                <div key={msg.id}>
+              {/* Category tabs (shown before first user msg) */}
+              {showCategories && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex flex-wrap gap-1.5 mb-1"
+                >
+                  {CATEGORIES.map((cat) => (
+                    <button
+                      key={cat.label}
+                      type="button"
+                      data-ocid="chatbot.tab"
+                      onClick={() => sendMessage(cat.prompt)}
+                      disabled={loading}
+                      className="text-xs px-2.5 py-1.5 rounded-full border border-border bg-background hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all font-medium disabled:opacity-40 flex items-center gap-1"
+                    >
+                      <span>{cat.emoji}</span>
+                      <span>{cat.label}</span>
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+
+              {messages.map((msg, idx) => {
+                const isLast = idx === messages.length - 1;
+                if (msg.role === "user") {
+                  const ts = msg.timestamp.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  });
+                  return (
+                    <motion.div
+                      key={msg.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="flex justify-end"
+                    >
+                      <div className="flex flex-col items-end gap-0.5">
+                        <div className="max-w-[80%] rounded-2xl rounded-tr-sm px-3.5 py-2.5 text-sm leading-relaxed bg-primary text-primary-foreground">
+                          {msg.text}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">
+                          {ts}
+                        </p>
+                      </div>
+                    </motion.div>
+                  );
+                }
+                return (
                   <motion.div
+                    key={msg.id}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.25 }}
-                    className={`flex ${
-                      msg.role === "user" ? "justify-end" : "justify-start"
-                    }`}
+                    transition={{ duration: 0.2 }}
                   >
-                    {msg.role === "bot" && (
-                      <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0 mr-2 mt-0.5">
-                        <Bot className="w-3.5 h-3.5 text-primary-foreground" />
-                      </div>
-                    )}
-                    <div
-                      className={`max-w-[78%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                        msg.role === "user"
-                          ? "bg-primary text-primary-foreground rounded-tr-sm"
-                          : "bg-muted text-foreground rounded-tl-sm"
-                      }`}
-                    >
-                      {renderText(msg.text)}
-                      {msg.estimatorResult && (
-                        <EstimatorCard result={msg.estimatorResult} />
-                      )}
-                    </div>
+                    <BotMessage
+                      msg={msg}
+                      isLast={isLast}
+                      onFollowup={sendMessage}
+                    />
                   </motion.div>
-
-                  {/* Inline suggestions after bot messages */}
-                  {msg.role === "bot" &&
-                    msg.suggestions &&
-                    msg.suggestions.length > 0 && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.15, duration: 0.2 }}
-                        className="flex flex-wrap gap-1.5 mt-2 ml-9"
-                      >
-                        {msg.suggestions.map((s, idx) => (
-                          <button
-                            key={`${msg.id}-s${idx}`}
-                            data-ocid={`chatbot.suggestion.${idx + 1}`}
-                            type="button"
-                            onClick={() => sendMessage(s)}
-                            disabled={isTyping}
-                            className="text-xs px-2.5 py-1 rounded-full border border-primary/25 text-primary hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-primary/5 font-medium"
-                          >
-                            {s}
-                          </button>
-                        ))}
-                      </motion.div>
-                    )}
-                </div>
-              ))}
+                );
+              })}
 
               {/* Typing indicator */}
               <AnimatePresence>
-                {isTyping && (
+                {loading && (
                   <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
-                    className="flex justify-start items-center gap-2"
+                    className="flex items-center gap-2"
+                    data-ocid="chatbot.loading_state"
                   >
                     <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
                       <Bot className="w-3.5 h-3.5 text-primary-foreground" />
                     </div>
-                    <div className="bg-muted rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1">
-                      <span
-                        className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce"
-                        style={{ animationDelay: "0ms" }}
-                      />
-                      <span
-                        className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce"
-                        style={{ animationDelay: "150ms" }}
-                      />
-                      <span
-                        className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce"
-                        style={{ animationDelay: "300ms" }}
-                      />
+                    <div className="bg-muted rounded-2xl rounded-tl-sm px-4 py-3 flex gap-1">
+                      {[0, 150, 300].map((delay) => (
+                        <span
+                          key={delay}
+                          className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce"
+                          style={{ animationDelay: `${delay}ms` }}
+                        />
+                      ))}
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
-              <div ref={messagesEndRef} />
+              <div ref={bottomRef} />
             </div>
 
-            {/* Input */}
+            {/* Voice listening indicator */}
+            <AnimatePresence>
+              {isListening && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="bg-primary/10 border-t border-primary/20 px-4 py-2 flex items-center gap-2 text-primary text-sm"
+                >
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  Listening...
+                  <ChevronDown className="w-3 h-3 ml-auto opacity-50" />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Input area */}
             <div className="border-t border-border p-3 flex-shrink-0">
-              <form onSubmit={handleSubmit} className="flex gap-2">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  sendMessage(input);
+                }}
+                className="flex gap-2"
+              >
                 <Input
                   ref={inputRef}
-                  data-ocid="chatbot.input"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={handleKeyDown}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
                   placeholder={
-                    estimator.active
-                      ? "Select an option above or type to cancel…"
-                      : "Ask about places, costs, nearby…"
+                    isListening
+                      ? "Listening..."
+                      : "Ask anything about Alappuzha…"
                   }
-                  disabled={isTyping}
+                  disabled={loading}
+                  data-ocid="chatbot.input"
                   className="flex-1 text-sm rounded-xl border-primary/20 focus:border-primary"
                 />
+                {speechSupported && (
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant={isListening ? "destructive" : "outline"}
+                    onClick={toggleVoice}
+                    disabled={loading}
+                    className="rounded-xl w-9 h-9 flex-shrink-0"
+                    aria-label={isListening ? "Stop listening" : "Voice input"}
+                  >
+                    {isListening ? (
+                      <MicOff className="w-4 h-4" />
+                    ) : (
+                      <Mic className="w-4 h-4" />
+                    )}
+                  </Button>
+                )}
                 <Button
-                  data-ocid="chatbot.submit_button"
                   type="submit"
                   size="icon"
-                  disabled={!inputValue.trim() || isTyping}
+                  disabled={!input.trim() || loading}
+                  data-ocid="chatbot.submit_button"
                   className="bg-primary hover:bg-primary/90 rounded-xl w-9 h-9 flex-shrink-0"
-                  aria-label="Send message"
+                  aria-label="Send"
                 >
                   <Send className="w-4 h-4" />
                 </Button>
               </form>
               <p className="text-[10px] text-muted-foreground text-center mt-2 opacity-60">
-                AI-powered travel guide for Alappuzha
+                Gemini AI • Alappuzha Tourism Guide
               </p>
             </div>
           </motion.div>
