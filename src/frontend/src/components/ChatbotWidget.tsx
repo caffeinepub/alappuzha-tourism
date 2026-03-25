@@ -14,10 +14,35 @@ import { useEffect, useRef, useState } from "react";
 import type { Page } from "../App";
 
 const GEMINI_API_KEY = "AIzaSyDVkr9yIxvVYeEzhzf8YGCY1kIX5AqWwAA";
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
-const GEMINI_FALLBACK_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
-const SYSTEM_INSTRUCTION =
-  "You are an expert AI travel guide for Alappuzha (Alleppey), Kerala, India. Help tourists with places to visit, food, houseboats, transport, itineraries, budget tips, festivals, and local culture. Keep answers concise, friendly, and practical. Use emoji sparingly. Format with bullet points when listing items.";
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+const GEMINI_FALLBACK_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${GEMINI_API_KEY}`;
+const SYSTEM_INSTRUCTION = `You are a highly intelligent AI travel assistant for Alappuzha (Alleppey), Kerala, India — designed to be as helpful and natural as ChatGPT.
+
+Capabilities:
+- Natural, human-like conversation with full context awareness
+- Provide detailed, logical, and accurate answers about Alappuzha
+- Solve travel planning problems step-by-step
+- Generate creative content (captions, itineraries, packing lists, travel stories)
+- Assist with budgeting, booking tips, local culture, food, transport, houseboats, and nearby attractions
+
+Tone & Style:
+- Friendly, conversational, and professional
+- Adapt tone based on the user (formal or informal)
+- Keep explanations simple but meaningful
+
+Rules:
+- Never provide harmful or illegal content
+- If unsure about something, say so honestly — do not hallucinate facts
+- Be concise but thorough — avoid unnecessary filler
+
+Output Formatting:
+- Use bullet points when listing multiple items
+- Use bold text (**like this**) for key terms and headings
+- Use examples when helpful
+- Structure longer answers with clear sections
+- For itineraries or step-by-step plans, use numbered lists
+
+Focus areas: places to visit, houseboat bookings, local food, transport options, weather and best time to visit, festivals, budget planning, safety tips, nearby day trips, and authentic local experiences in Alappuzha.`;
 
 async function callGeminiAPI(
   url: string,
@@ -36,7 +61,10 @@ async function callGeminiAPI(
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`Gemini API error: ${res.status} - ${errText}`);
+    console.error("Gemini error status:", res.status, "body:", errText);
+    throw new Error(
+      `Gemini API error: ${res.status} ${res.statusText} - ${errText}`,
+    );
   }
 
   const data = await res.json();
@@ -61,9 +89,23 @@ async function getGeminiResponse(
   userText: string,
   history: { role: "user" | "bot"; text: string }[],
 ): Promise<string> {
-  const recentHistory = history.slice(-6);
+  // Build strictly alternating history (Gemini requires user/model alternation)
+  const recentHistory = history.slice(-10);
+  const alternating: typeof recentHistory = [];
+  let lastRole: string | null = null;
+  for (const m of recentHistory) {
+    const role = m.role === "user" ? "user" : "model";
+    if (role !== lastRole) {
+      alternating.push(m);
+      lastRole = role;
+    }
+  }
+  // Gemini requires first message to be "user"
+  const trimmed =
+    alternating[0]?.role !== "user" ? alternating.slice(1) : alternating;
+
   const contents = [
-    ...recentHistory.map((m) => ({
+    ...trimmed.map((m) => ({
       role: m.role === "user" ? "user" : "model",
       parts: [{ text: m.text }],
     })),
@@ -73,22 +115,27 @@ async function getGeminiResponse(
   try {
     return await callGeminiAPI(GEMINI_API_URL, contents);
   } catch (primaryErr) {
-    console.error("Gemini primary model error, trying fallback:", primaryErr);
     console.error(
-      "Gemini error details:",
-      JSON.stringify(primaryErr),
+      "Gemini primary model (gemini-1.5-flash) error, trying fallback:",
       primaryErr,
     );
     try {
       return await callGeminiAPI(GEMINI_FALLBACK_URL, contents);
     } catch (fallbackErr) {
-      console.error("Gemini fallback model also failed:", fallbackErr);
       console.error(
-        "Gemini error details:",
-        JSON.stringify(fallbackErr),
+        "Gemini fallback model (gemini-1.5-pro) also failed, trying third fallback:",
         fallbackErr,
       );
-      throw fallbackErr;
+      const GEMINI_THIRD_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+      try {
+        return await callGeminiAPI(GEMINI_THIRD_URL, contents);
+      } catch (thirdErr) {
+        console.error(
+          "Gemini third fallback model (gemini-pro) also failed:",
+          thirdErr,
+        );
+        throw thirdErr;
+      }
     }
   }
 }
@@ -438,9 +485,10 @@ export default function ChatbotWidget({
       return;
     }
 
-    // Build conversation history for Gemini (exclude welcome message)
+    // Build conversation history for Gemini
+    // Exclude: welcome message, and messages with estimatorResult (non-text content)
     const history = messages
-      .filter((m) => m.id !== "welcome")
+      .filter((m) => m.id !== "welcome" && !m.estimatorResult)
       .map((m) => ({ role: m.role, text: m.text }));
 
     try {
@@ -451,8 +499,7 @@ export default function ChatbotWidget({
         suggestions: GENERIC_SUGGESTIONS,
       });
     } catch (_err) {
-      console.error("Gemini error:", _err);
-      console.error("Gemini error details:", JSON.stringify(_err), _err);
+      console.error("Gemini error (all models failed):", _err);
       setIsTyping(false);
       pushBotMessage({
         text: "Sorry, I couldn't connect to the AI right now. Please try again in a moment.",
