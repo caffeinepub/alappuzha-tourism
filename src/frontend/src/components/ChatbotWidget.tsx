@@ -14,8 +14,12 @@ import { useEffect, useRef, useState } from "react";
 import type { Page } from "../App";
 
 const GEMINI_API_KEY = "AIzaSyDVkr9yIxvVYeEzhzf8YGCY1kIX5AqWwAA";
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-const GEMINI_FALLBACK_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${GEMINI_API_KEY}`;
+// Use stable v1 endpoint with current model names
+const GEMINI_MODELS = [
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-lite",
+  "gemini-1.5-flash",
+];
 const SYSTEM_INSTRUCTION = `You are a highly intelligent AI travel assistant for Alappuzha (Alleppey), Kerala, India — designed to be as helpful and natural as ChatGPT.
 
 Capabilities:
@@ -45,53 +49,68 @@ Output Formatting:
 Focus areas: places to visit, houseboat bookings, local food, transport options, weather and best time to visit, festivals, budget planning, safety tips, nearby day trips, and authentic local experiences in Alappuzha.`;
 
 async function callGeminiAPI(
-  url: string,
+  model: string,
   contents: { role: string; parts: { text: string }[] }[],
 ): Promise<string> {
+  // Use stable v1 endpoint
+  const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
   const body = {
     system_instruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
     contents,
+    generationConfig: {
+      maxOutputTokens: 1024,
+      temperature: 0.7,
+    },
   };
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
 
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error("Gemini error status:", res.status, "body:", errText);
-    throw new Error(
-      `Gemini API error: ${res.status} ${res.statusText} - ${errText}`,
-    );
-  }
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
 
-  const data = await res.json();
-  console.log("Gemini API response:", JSON.stringify(data));
+    clearTimeout(timeout);
 
-  const candidate = data?.candidates?.[0];
-  if (candidate && !candidate.content?.parts?.[0]?.text) {
-    const finishReason = candidate.finishReason;
-    if (finishReason) {
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`Gemini model ${model} error ${res.status}:`, errText);
+      throw new Error(`Gemini API error: ${res.status}`);
+    }
+
+    const data = await res.json();
+    const candidate = data?.candidates?.[0];
+
+    if (
+      candidate?.finishReason &&
+      candidate.finishReason !== "STOP" &&
+      !candidate.content?.parts?.[0]?.text
+    ) {
       throw new Error(
-        `Gemini response blocked or empty. Finish reason: ${finishReason}`,
+        `Gemini response blocked. Finish reason: ${candidate.finishReason}`,
       );
     }
-  }
 
-  const text = candidate?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Empty Gemini response");
-  return text;
+    const text = candidate?.content?.parts?.[0]?.text;
+    if (!text) throw new Error("Empty Gemini response");
+    return text;
+  } catch (err) {
+    clearTimeout(timeout);
+    throw err;
+  }
 }
 
 async function getGeminiResponse(
   userText: string,
   history: { role: "user" | "bot"; text: string }[],
 ): Promise<string> {
-  // Build strictly alternating history (Gemini requires user/model alternation)
-  const recentHistory = history.slice(-10);
-  const alternating: typeof recentHistory = [];
+  // Build strictly alternating user/model history (Gemini requirement)
+  const recentHistory = history.slice(-8);
+  const alternating: { role: "user" | "bot"; text: string }[] = [];
   let lastRole: string | null = null;
   for (const m of recentHistory) {
     const role = m.role === "user" ? "user" : "model";
@@ -100,9 +119,11 @@ async function getGeminiResponse(
       lastRole = role;
     }
   }
-  // Gemini requires first message to be "user"
+  // Gemini requires conversation to start with "user"
   const trimmed =
-    alternating[0]?.role !== "user" ? alternating.slice(1) : alternating;
+    alternating.length > 0 && alternating[0].role !== "user"
+      ? alternating.slice(1)
+      : alternating;
 
   const contents = [
     ...trimmed.map((m) => ({
@@ -112,32 +133,19 @@ async function getGeminiResponse(
     { role: "user", parts: [{ text: userText }] },
   ];
 
-  try {
-    return await callGeminiAPI(GEMINI_API_URL, contents);
-  } catch (primaryErr) {
-    console.error(
-      "Gemini primary model (gemini-1.5-flash) error, trying fallback:",
-      primaryErr,
-    );
+  let lastErr: Error | null = null;
+  for (const model of GEMINI_MODELS) {
     try {
-      return await callGeminiAPI(GEMINI_FALLBACK_URL, contents);
-    } catch (fallbackErr) {
-      console.error(
-        "Gemini fallback model (gemini-1.5-pro) also failed, trying third fallback:",
-        fallbackErr,
-      );
-      const GEMINI_THIRD_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
-      try {
-        return await callGeminiAPI(GEMINI_THIRD_URL, contents);
-      } catch (thirdErr) {
-        console.error(
-          "Gemini third fallback model (gemini-pro) also failed:",
-          thirdErr,
-        );
-        throw thirdErr;
-      }
+      console.log(`Trying Gemini model: ${model}`);
+      const result = await callGeminiAPI(model, contents);
+      console.log(`Success with model: ${model}`);
+      return result;
+    } catch (err) {
+      console.warn(`Gemini model ${model} failed:`, err);
+      lastErr = err as Error;
     }
   }
+  throw lastErr;
 }
 
 const GENERIC_SUGGESTIONS = [
@@ -485,8 +493,7 @@ export default function ChatbotWidget({
       return;
     }
 
-    // Build conversation history for Gemini
-    // Exclude: welcome message, and messages with estimatorResult (non-text content)
+    // Build conversation history for Gemini (exclude welcome and estimator messages)
     const history = messages
       .filter((m) => m.id !== "welcome" && !m.estimatorResult)
       .map((m) => ({ role: m.role, text: m.text }));
@@ -498,11 +505,11 @@ export default function ChatbotWidget({
         text: responseText,
         suggestions: GENERIC_SUGGESTIONS,
       });
-    } catch (_err) {
-      console.error("Gemini error (all models failed):", _err);
+    } catch (err) {
+      console.error("Gemini error (all models failed):", err);
       setIsTyping(false);
       pushBotMessage({
-        text: "Sorry, I couldn't connect to the AI right now. Please try again in a moment.",
+        text: "Sorry, I couldn't connect to the AI right now. Please check your internet connection and try again.",
         suggestions: GENERIC_SUGGESTIONS,
       });
     }
