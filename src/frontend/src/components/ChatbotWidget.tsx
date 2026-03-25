@@ -16,9 +16,9 @@ import type { Page } from "../App";
 const GEMINI_API_KEY = "AIzaSyDVkr9yIxvVYeEzhzf8YGCY1kIX5AqWwAA";
 // Use stable v1 endpoint with current model names
 const GEMINI_MODELS = [
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-lite",
   "gemini-1.5-flash",
+  "gemini-1.5-flash-8b",
+  "gemini-1.5-pro",
 ];
 const SYSTEM_INSTRUCTION = `You are a highly intelligent AI travel assistant for Alappuzha (Alleppey), Kerala, India — designed to be as helpful and natural as ChatGPT.
 
@@ -55,7 +55,7 @@ async function callGeminiAPI(
   // Use stable v1 endpoint
   const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
   const body = {
-    system_instruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+    systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
     contents,
     generationConfig: {
       maxOutputTokens: 1024,
