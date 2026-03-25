@@ -64,7 +64,7 @@ async function callGemini(
   contents: GeminiContent[],
   systemInstruction: string,
 ): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 25000);
   try {
