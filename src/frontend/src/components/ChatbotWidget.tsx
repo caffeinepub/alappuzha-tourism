@@ -24,227 +24,122 @@ import {
   useState,
 } from "react";
 
-// ─── Predefined Q&A ───────────────────────────────────────────────────────────
-
-const PREDEFINED_QA: Record<string, string> = {
-  "What is Alappuzha famous for?":
-    "Alappuzha (Alleppey) is famous for:\n- **Backwaters & Houseboats**: Kerala's most iconic houseboat cruises\n- **Nehru Trophy Boat Race**: Legendary snake boat race held every August\n- **Alappuzha Beach**: One of Kerala's most popular beaches\n- **Coir Industry**: Traditional coconut fiber products\n- **Kuttanad**: The 'Rice Bowl of Kerala', fields below sea level\n- **Heritage**: Colonial-era canals, churches, and temples",
-
-  "Best time to visit Alappuzha?":
-    "**Best time: October to March** (Winter/Peak Season)\n- Cool weather (22–32°C), perfect for backwater cruises\n- All tourist spots are open and accessible\n- Nehru Trophy Boat Race: August (Snake Boat Race)\n\n**Monsoon (June–September)**:\n- Lush green scenery, romantic ambiance\n- Some activities may be restricted\n- Great for budget travelers (lower prices)\n\n**Avoid April–May**: Very hot and humid",
-
-  "How to reach Alappuzha?":
-    "**By Train**: Alappuzha Railway Station is well connected to major cities. Trains from Kochi (~1.5 hrs), Thiruvananthapuram (~2.5 hrs), Mumbai, Delhi.\n\n**By Road**: 85 km from Kochi (KSRTC buses, private taxis). NH66 passes through Alappuzha.\n\n**By Air**: Nearest airport is Cochin International Airport (85 km). Taxis and buses available.\n\n**By Water**: Ferry services from Kottayam and Kollam (scenic route).",
-
-  "What is houseboat price in Alappuzha?":
-    "**Houseboat Pricing in Alappuzha:**\n\n- **Budget (1 BHK)**: ₹5,000–₹8,000/night\n- **Standard (2 BHK)**: ₹8,000–₹12,000/night\n- **Premium/Luxury**: ₹12,000–₹20,000+/night\n\n**Includes**: Accommodation, all meals, AC, crew\n**Duration**: Typically 22-hour package (noon to noon)\n**Best Route**: Alleppey to Kumarakom or Punnamada Lake\n\nBook via Booking.com or MakeMyTrip for best deals.",
-
-  "What food to try in Alappuzha?":
-    "**Must-try foods in Alappuzha:**\n\n- **Karimeen Pollichathu** (Pearl Spot Fish) — the signature dish\n- **Prawn Curry** with coconut milk\n- **Kerala Fish Curry** with kodampuli (gamboge)\n- **Appam & Stew** — fluffy rice pancakes with coconut stew\n- **Kerala Sadya** — traditional feast on banana leaf\n- **Puttu & Kadala Curry** — steamed rice cake with chickpea curry\n- **Toddy & Kallu Shaap** — traditional toddy shops\n\nBest restaurants: Thaff Restaurant, Mushroom Restaurant, Dream Catcher.",
-
-  "Top tourist places in Alappuzha?":
-    "**Top Places to Visit in Alappuzha:**\n\n1. **Alappuzha Beach** — Pier, lighthouse, sunset views\n2. **Punnamada Lake** — Houseboat hub, Nehru Trophy venue\n3. **Vembanad Lake** — Largest lake in Kerala\n4. **Krishnapuram Palace** — 18th-century palace, Gajendra Moksham mural\n5. **St. Andrew's Basilica, Arthunkal** — Famous church, annual feast\n6. **Revi Karunakaran Museum** — Glass & crystal collection\n7. **Marari Beach** — Pristine, less crowded beach\n8. **Kuttanad Backwaters** — Below sea-level farming fields\n9. **Pathiramanal Island** — Bird sanctuary on Vembanad Lake\n10. **Ambalapuzha Sree Krishna Temple** — Famous for Palpayasam",
-
-  "Local transport options in Alappuzha?":
-    "**Local Transport in Alappuzha:**\n\n- **Auto Rickshaws**: Most common, metered or negotiated fares (₹30–₹150)\n- **KSRTC Buses**: Connect major towns, very affordable\n- **Ferries/Boats**: Govt. boat services on backwater routes (₹5–₹30)\n- **Cycle Rickshaws**: For short distances in town center\n- **Bicycles**: Many guesthouses rent bicycles (₹50–₹100/day)\n- **Taxis/Cabs**: Ola/Uber available, also local taxis\n- **Private Speedboats**: For quick backwater tours (₹500–₹1500)",
-};
-
-function findPredefinedAnswer(input: string): string | null {
-  const lower = input.trim().toLowerCase();
-  for (const [question, answer] of Object.entries(PREDEFINED_QA)) {
-    if (lower === question.toLowerCase()) return answer;
-    // Substring match: if the user's input is contained in the question or vice versa
-    if (
-      question.toLowerCase().includes(lower) ||
-      lower.includes(question.toLowerCase().replace("?", ""))
-    ) {
-      return answer;
-    }
-  }
-  return null;
-}
-
-// ─── Gemini API Setup ────────────────────────────────────────────────────────
+// ─── Gemini API ───────────────────────────────────────────────────────────────
 
 const GEMINI_API_KEY = "AIzaSyAsrVCwCFsVmniTLlOtX-8qARmE8H-qVgE";
-const GEMINI_MODELS = [
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-8b",
-  "gemini-1.5-pro",
-];
+const GEMINI_MODELS = ["gemini-1.5-flash", "gemini-1.5-flash-8b"];
 
-const BASE_SYSTEM_INSTRUCTION = `You are an expert AI travel assistant for Alappuzha (Alleppey), Kerala, India. You have deep knowledge of:
-- Tourist places: backwaters, beaches, temples, museums, festivals (Nehru Trophy Boat Race, Onam)
-- Houseboats: types, pricing (₹5,000–₹20,000/night), booking tips, best routes
-- Accommodation: hotels, resorts, homestays, budget guesthouses
-- Food: Kerala cuisine, seafood, local restaurants, must-try dishes (fish curry, karimeen, appam)
-- Transport: trains (Alappuzha railway station), buses, autos, boat services, ferries
-- Budget planning: budget/mid-range/luxury options with INR estimates
-- Itinerary planning: 1-day to 7-day detailed schedules
-- Best time: October–March (peak season), monsoon charm June–September
-- Nearby attractions: Kochi (85km), Kollam, Kumarakom
+const SYSTEM_PROMPT = `You are an expert AI travel assistant for Alappuzha (Alleppey), Kerala, India.
+You have deep knowledge of tourist places, houseboats, backwaters, food, accommodation, transport, festivals, and budget planning for Alappuzha.
+You also handle general queries (coding, academics, casual chat) helpfully.
+Be concise but comprehensive. Use bullet points and structure. Be friendly and professional.
+Avoid harmful or illegal content. If unsure, say so honestly.`;
 
-You also handle general queries (coding, academics, casual chat) with a helpful ChatGPT-like tone.
-
-Rules:
-- Be concise but comprehensive. Use bullet points and structure.
-- Always give practical, actionable advice.
-- For bookings, suggest Booking.com or MakeMyTrip.
-- Avoid harmful/illegal content.
-- If unsure, say so honestly.`;
-
-interface GeminiContent {
+interface GeminiMessage {
   role: "user" | "model";
   parts: { text: string }[];
 }
 
-async function callGemini(
-  model: string,
-  contents: GeminiContent[],
-  systemInstruction: string,
-  signal: AbortSignal,
-): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    signal,
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: systemInstruction }] },
-      contents,
-      generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
-    }),
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    console.error(`[Gemini] ${model} → ${res.status}:`, err);
-    throw new Error(`HTTP ${res.status}`);
-  }
-  const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Empty response");
-  return text;
-}
-
-async function streamAIResponse(
+async function askGemini(
   userText: string,
   history: { role: "user" | "bot"; text: string }[],
-  contextTopic: string,
-  onChunk: (delta: string) => void,
-  signal: AbortSignal,
-): Promise<void> {
-  // Check predefined answers first
-  const predefined = findPredefinedAnswer(userText);
-  if (predefined) {
-    // Simulate word-by-word streaming for consistency
-    const words = predefined.split(" ");
-    for (const word of words) {
-      if (signal.aborted) break;
-      onChunk(`${word} `);
-      await new Promise((r) => setTimeout(r, 18));
-    }
-    return;
-  }
-
-  const systemInstruction = contextTopic
-    ? `${BASE_SYSTEM_INSTRUCTION}\n\nContext: The user has been asking about [${contextTopic}]. Tailor your response accordingly.`
-    : BASE_SYSTEM_INSTRUCTION;
-
-  const contents: GeminiContent[] = [];
+): Promise<string> {
+  // Build conversation contents (must alternate user/model, start with user)
+  const contents: GeminiMessage[] = [];
   for (const m of history.slice(-10)) {
     const role = m.role === "user" ? "user" : "model";
+    // Skip consecutive same-role messages
     if (contents.length > 0 && contents[contents.length - 1].role === role)
       continue;
-    contents.push({ role, parts: [{ text: m.text }] });
+    if (m.text.trim()) contents.push({ role, parts: [{ text: m.text }] });
   }
+  // Ensure starts with user
   if (contents.length > 0 && contents[0].role !== "user") contents.shift();
   contents.push({ role: "user", parts: [{ text: userText }] });
 
-  // Add 20-second timeout
-  const ac = new AbortController();
-  const tid = setTimeout(() => ac.abort(new Error("timeout")), 20000);
-  signal.addEventListener("abort", () => ac.abort(signal.reason), {
-    once: true,
-  });
+  const body = {
+    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    contents,
+    generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
+  };
 
-  let fullText = "";
-  try {
-    for (const model of GEMINI_MODELS) {
-      try {
-        fullText = await callGemini(
-          model,
-          contents,
-          systemInstruction,
-          ac.signal,
-        );
-        break;
-      } catch (err) {
-        if (ac.signal.aborted) throw err;
-        console.warn(`[Gemini] ${model} failed:`, err);
+  for (const model of GEMINI_MODELS) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(25000),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error(`[Gemini] ${model} HTTP ${res.status}:`, errText);
+        continue;
       }
+
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) return text;
+      console.warn(`[Gemini] ${model} empty response:`, JSON.stringify(data));
+    } catch (err) {
+      console.error(`[Gemini] ${model} error:`, err);
     }
-    if (!fullText) throw new Error("All Gemini models failed");
-  } finally {
-    clearTimeout(tid);
   }
 
-  // Simulate word-by-word streaming for real-time feel
-  const words = fullText.split(" ");
-  for (const word of words) {
-    if (signal.aborted) break;
-    onChunk(`${word} `);
-    await new Promise((r) => setTimeout(r, 18));
-  }
+  throw new Error("All Gemini models failed");
 }
 
-// ─── Topic Detection ──────────────────────────────────────────────────────────
+// ─── Predefined Quick Q&A ─────────────────────────────────────────────────────
+
+const QUICK_QA: { q: string; a: string }[] = [
+  {
+    q: "What is Alappuzha famous for?",
+    a: "Alappuzha (Alleppey) is famous for:\n- **Backwaters & Houseboats**: Kerala's most iconic houseboat cruises\n- **Nehru Trophy Boat Race**: Legendary snake boat race held every August\n- **Alappuzha Beach**: One of Kerala's most popular beaches\n- **Coir Industry**: Traditional coconut fiber products\n- **Kuttanad**: The 'Rice Bowl of Kerala', fields below sea level",
+  },
+  {
+    q: "Best time to visit?",
+    a: "**Best time: October to March** (cool weather 22–32°C, all spots open)\n- **August**: Nehru Trophy Boat Race\n- **Monsoon (June–Sept)**: Lush scenery, lower prices\n- **Avoid April–May**: Very hot and humid",
+  },
+  {
+    q: "Houseboat prices?",
+    a: "**Houseboat Pricing:**\n- Budget (1 BHK): ₹5,000–₹8,000/night\n- Standard (2 BHK): ₹8,000–₹12,000/night\n- Luxury: ₹12,000–₹20,000+/night\n\nIncludes accommodation, all meals, AC, crew. Typical 22-hour package.",
+  },
+  {
+    q: "How to reach Alappuzha?",
+    a: "**By Train**: Alappuzha Railway Station — from Kochi (~1.5 hrs), Trivandrum (~2.5 hrs)\n**By Road**: 85 km from Kochi via NH66\n**By Air**: Cochin International Airport (85 km)\n**By Ferry**: Scenic routes from Kottayam and Kollam",
+  },
+  {
+    q: "Must-try foods?",
+    a: "**Must-try in Alappuzha:**\n- Karimeen Pollichathu (Pearl Spot Fish) — signature dish\n- Prawn Curry with coconut milk\n- Appam & Stew\n- Kerala Sadya (feast on banana leaf)\n- Puttu & Kadala Curry",
+  },
+];
+
+// ─── Topic & Follow-up ────────────────────────────────────────────────────────
 
 const TOPIC_KEYWORDS: Record<string, string[]> = {
-  houseboats: ["houseboat", "backwater", "cruise", "boat", "kettuvallam"],
-  food: [
-    "food",
-    "eat",
-    "restaurant",
-    "cuisine",
-    "dish",
-    "karimeen",
-    "appam",
-    "fish",
-    "seafood",
-    "meal",
+  houseboats: ["houseboat", "backwater", "cruise", "boat"],
+  food: ["food", "eat", "restaurant", "cuisine", "fish", "seafood"],
+  budget: ["budget", "cost", "price", "cheap", "rupee", "₹"],
+  transport: ["train", "bus", "auto", "taxi", "ferry", "reach"],
+  stays: ["hotel", "resort", "homestay", "stay", "accommodation"],
+  itinerary: ["itinerary", "plan", "days", "trip", "tour"],
+  beaches: ["beach", "sea", "coast"],
+};
+
+const FOLLOWUP_MAP: Record<string, string[]> = {
+  houseboats: [
+    "Book a houseboat?",
+    "Best houseboat routes?",
+    "Houseboat cost?",
   ],
-  temples: ["temple", "church", "mosque", "shrine", "puja", "festival"],
-  budget: [
-    "budget",
-    "cost",
-    "price",
-    "cheap",
-    "expensive",
-    "money",
-    "rupee",
-    "₹",
-  ],
-  transport: [
-    "train",
-    "bus",
-    "auto",
-    "taxi",
-    "ferry",
-    "reach",
-    "travel",
-    "transport",
-  ],
-  stays: [
-    "hotel",
-    "resort",
-    "homestay",
-    "stay",
-    "accommodation",
-    "room",
-    "book",
-  ],
-  itinerary: ["itinerary", "plan", "schedule", "days", "trip", "tour"],
-  beaches: ["beach", "sea", "coast", "shore", "alappuzha beach"],
+  food: ["Best restaurants?", "Must-try dishes?", "Vegetarian options?"],
+  budget: ["Budget breakdown?", "Cheap stays?", "Free attractions?"],
+  transport: ["Local transport options?", "Auto fare?", "Ferry routes?"],
+  stays: ["Best hotels?", "Homestay recommendations?", "Beach resorts?"],
+  itinerary: ["2-day plan?", "Family-friendly spots?", "Adventure options?"],
+  beaches: ["Beach activities?", "Sunset viewpoints?", "Nearest beach?"],
 };
 
 function detectTopic(text: string): string {
@@ -254,23 +149,6 @@ function detectTopic(text: string): string {
   }
   return "";
 }
-
-// ─── Follow-up Suggestions ────────────────────────────────────────────────────
-
-const FOLLOWUP_MAP: Record<string, string[]> = {
-  houseboats: [
-    "Book a houseboat?",
-    "Houseboat cost?",
-    "Best houseboat routes?",
-  ],
-  food: ["Best restaurants?", "Must-try dishes?", "Vegetarian options?"],
-  temples: ["Temple timings?", "Dress code?", "Other religious sites?"],
-  budget: ["Budget breakdown?", "Cheap stays?", "Free attractions?"],
-  transport: ["How to reach?", "Local transport options?", "Auto fare?"],
-  stays: ["Best hotels?", "Homestay recommendations?", "Beach resorts?"],
-  itinerary: ["2-day plan?", "Family-friendly spots?", "Adventure options?"],
-  beaches: ["Beach activities?", "Nearest beach?", "Sunset viewpoint?"],
-};
 
 function getFollowups(botText: string): string[] {
   const lower = botText.toLowerCase();
@@ -284,106 +162,80 @@ function getFollowups(botText: string): string[] {
 
 // ─── Markdown Renderer ────────────────────────────────────────────────────────
 
+function InlineText({ text }: { text: string }): ReactElement {
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          // biome-ignore lint/suspicious/noArrayIndexKey: static inline split
+          return <strong key={i}>{part.slice(2, -2)}</strong>;
+        }
+        if (part.startsWith("*") && part.endsWith("*")) {
+          // biome-ignore lint/suspicious/noArrayIndexKey: static inline split
+          return <em key={i}>{part.slice(1, -1)}</em>;
+        }
+        // biome-ignore lint/suspicious/noArrayIndexKey: static inline split
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+}
+
 function renderMarkdown(text: string): ReactElement {
   const lines = text.split("\n");
   const elements: ReactElement[] = [];
   let listItems: string[] = [];
-  let orderedItems: string[] = [];
-  let keyCounter = 0;
+  let key = 0;
 
   const flushList = () => {
     if (listItems.length > 0) {
+      const items = [...listItems];
       elements.push(
         <ul
-          key={`ul-${keyCounter++}`}
+          key={`ul-${key++}`}
           className="list-disc list-inside space-y-0.5 my-1.5 pl-1"
         >
-          {listItems.map((item, i) => (
-            <li
-              // biome-ignore lint/suspicious/noArrayIndexKey: markdown list items have no stable id
-              key={i}
-              className="text-sm leading-relaxed"
-              // biome-ignore lint/security/noDangerouslySetInnerHtml: safe formatted text
-              dangerouslySetInnerHTML={{ __html: inlineFormat(item) }}
-            />
+          {items.map((item) => (
+            <li key={item.slice(0, 40)} className="text-sm leading-relaxed">
+              <InlineText text={item} />
+            </li>
           ))}
         </ul>,
       );
       listItems = [];
     }
-    if (orderedItems.length > 0) {
-      elements.push(
-        <ol
-          key={`ol-${keyCounter++}`}
-          className="list-decimal list-inside space-y-0.5 my-1.5 pl-1"
-        >
-          {orderedItems.map((item, i) => (
-            <li
-              // biome-ignore lint/suspicious/noArrayIndexKey: markdown list items have no stable id
-              key={i}
-              className="text-sm leading-relaxed"
-              // biome-ignore lint/security/noDangerouslySetInnerHtml: safe formatted text
-              dangerouslySetInnerHTML={{ __html: inlineFormat(item) }}
-            />
-          ))}
-        </ol>,
-      );
-      orderedItems = [];
-    }
   };
 
   for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) {
+    const t = line.trim();
+    if (!t) {
       flushList();
-      elements.push(<div key={`sp-${keyCounter++}`} className="h-1" />);
+      elements.push(<div key={`sp-${key++}`} className="h-1" />);
       continue;
     }
-    if (trimmed.startsWith("### ")) {
+    if (t.startsWith("## ")) {
       flushList();
       elements.push(
-        <p
-          key={`h3-${keyCounter++}`}
-          className="font-semibold text-sm mt-2 mb-0.5"
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: safe formatted text
-          dangerouslySetInnerHTML={{ __html: inlineFormat(trimmed.slice(4)) }}
-        />,
+        <p key={`h2-${key++}`} className="font-bold text-sm mt-2 mb-0.5">
+          <InlineText text={t.slice(3)} />
+        </p>,
       );
-    } else if (trimmed.startsWith("## ")) {
+    } else if (t.startsWith("# ")) {
       flushList();
       elements.push(
-        <p
-          key={`h2-${keyCounter++}`}
-          className="font-bold text-sm mt-2 mb-0.5"
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: safe formatted text
-          dangerouslySetInnerHTML={{ __html: inlineFormat(trimmed.slice(3)) }}
-        />,
+        <p key={`h1-${key++}`} className="font-bold text-base mt-2 mb-1">
+          <InlineText text={t.slice(2)} />
+        </p>,
       );
-    } else if (trimmed.startsWith("# ")) {
-      flushList();
-      elements.push(
-        <p
-          key={`h1-${keyCounter++}`}
-          className="font-bold text-base mt-2 mb-1"
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: safe formatted text
-          dangerouslySetInnerHTML={{ __html: inlineFormat(trimmed.slice(2)) }}
-        />,
-      );
-    } else if (trimmed.match(/^[-•*] /)) {
-      if (orderedItems.length > 0) flushList();
-      listItems.push(trimmed.replace(/^[-•*] /, ""));
-    } else if (trimmed.match(/^\d+\. /)) {
-      if (listItems.length > 0) flushList();
-      orderedItems.push(trimmed.replace(/^\d+\. /, ""));
+    } else if (t.match(/^[-•*] /)) {
+      listItems.push(t.replace(/^[-•*] /, ""));
     } else {
       flushList();
       elements.push(
-        <p
-          key={`p-${keyCounter++}`}
-          className="text-sm leading-relaxed"
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: safe formatted text
-          dangerouslySetInnerHTML={{ __html: inlineFormat(trimmed) }}
-        />,
+        <p key={`p-${key++}`} className="text-sm leading-relaxed">
+          <InlineText text={t} />
+        </p>,
       );
     }
   }
@@ -391,37 +243,23 @@ function renderMarkdown(text: string): ReactElement {
   return <div className="space-y-0.5">{elements}</div>;
 }
 
-function inlineFormat(text: string): string {
-  return text
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(
-      /`(.+?)`/g,
-      '<code class="bg-black/10 rounded px-1 text-xs font-mono">$1</code>',
-    );
-}
-
 // ─── Category Tabs ────────────────────────────────────────────────────────────
 
 const CATEGORIES = [
-  {
-    label: "Places",
-    prompt: "Tell me the best places to visit in Alappuzha",
-    emoji: "🏛️",
-  },
+  { label: "Places", prompt: "Best places to visit in Alappuzha?", emoji: "🏛️" },
   {
     label: "Food",
-    prompt: "What are the must-try foods and restaurants in Alappuzha?",
+    prompt: "Must-try foods and restaurants in Alappuzha?",
     emoji: "🍛",
   },
   {
     label: "Stays",
-    prompt: "What are the best accommodation options in Alappuzha?",
+    prompt: "Best accommodation options in Alappuzha?",
     emoji: "🏨",
   },
   {
     label: "Transport",
-    prompt: "How to reach Alappuzha and what are local transport options?",
+    prompt: "How to reach Alappuzha and local transport options?",
     emoji: "🚢",
   },
   {
@@ -431,38 +269,31 @@ const CATEGORIES = [
   },
 ];
 
-// ─── Message Types ────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Message {
   id: string;
   role: "user" | "bot";
   text: string;
   timestamp: Date;
-  streaming?: boolean;
 }
 
-// ─── Bot Message Component ────────────────────────────────────────────────────
+// ─── Bot Message ──────────────────────────────────────────────────────────────
 
 function BotMessage({
   msg,
   isLast,
   onFollowup,
-}: {
-  msg: Message;
-  isLast: boolean;
-  onFollowup: (text: string) => void;
-}) {
+}: { msg: Message; isLast: boolean; onFollowup: (t: string) => void }) {
   const [copied, setCopied] = useState(false);
   const [hovered, setHovered] = useState(false);
-  const followups = isLast && !msg.streaming ? getFollowups(msg.text) : [];
-
+  const followups = isLast ? getFollowups(msg.text) : [];
   const copy = () => {
     navigator.clipboard.writeText(msg.text);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
-
-  const timestamp = msg.timestamp.toLocaleTimeString([], {
+  const ts = msg.timestamp.toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -478,14 +309,10 @@ function BotMessage({
           <Bot className="w-3.5 h-3.5 text-primary-foreground" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="bg-muted text-foreground rounded-2xl rounded-tl-sm px-3.5 py-2.5 relative group max-w-[90%]">
+          <div className="bg-muted text-foreground rounded-2xl rounded-tl-sm px-3.5 py-2.5 relative max-w-[90%]">
             {renderMarkdown(msg.text)}
-            {/* Blinking cursor while streaming */}
-            {msg.streaming && (
-              <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-middle" />
-            )}
             <AnimatePresence>
-              {hovered && !msg.streaming && (
+              {hovered && (
                 <motion.button
                   type="button"
                   initial={{ opacity: 0, scale: 0.8 }}
@@ -493,7 +320,7 @@ function BotMessage({
                   exit={{ opacity: 0, scale: 0.8 }}
                   onClick={copy}
                   className="absolute -top-2.5 -right-2.5 w-6 h-6 bg-background border border-border rounded-full flex items-center justify-center shadow-sm hover:bg-muted transition-colors"
-                  aria-label="Copy message"
+                  aria-label="Copy"
                 >
                   {copied ? (
                     <Check className="w-3 h-3 text-emerald-500" />
@@ -504,15 +331,9 @@ function BotMessage({
               )}
             </AnimatePresence>
           </div>
-          {!msg.streaming && (
-            <p className="text-[10px] text-muted-foreground mt-0.5 ml-1">
-              {timestamp}
-            </p>
-          )}
+          <p className="text-[10px] text-muted-foreground mt-0.5 ml-1">{ts}</p>
         </div>
       </div>
-
-      {/* Follow-up chips */}
       <AnimatePresence>
         {followups.length > 0 && (
           <motion.div
@@ -538,12 +359,12 @@ function BotMessage({
   );
 }
 
-// ─── Main Widget ──────────────────────────────────────────────────────────────
+// ─── Widget ───────────────────────────────────────────────────────────────────
 
 const WELCOME: Message = {
   id: "welcome",
   role: "bot",
-  text: "👋 Hi! I'm your **Alappuzha AI Travel Guide**, powered by Gemini AI.\n\nAsk me anything about Alappuzha — places to visit, food, houseboats, itineraries, budget tips, and more!",
+  text: "👋 Hi! I'm your **Alappuzha AI Travel Guide**, powered by Gemini AI.\n\nAsk me anything about Alappuzha — places, food, houseboats, itineraries, budget tips, and more!",
   timestamp: new Date(),
 };
 
@@ -553,14 +374,13 @@ export default function ChatbotWidget() {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showCategories, setShowCategories] = useState(true);
+  const [showHome, setShowHome] = useState(true);
   const [contextTopic, setContextTopic] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
-  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const SR =
@@ -570,11 +390,10 @@ export default function ChatbotWidget() {
   }, []);
 
   const msgCount = messages.length;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll when messages or loading changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgCount, loading]);
-
   useEffect(() => {
     if (isOpen) setTimeout(() => inputRef.current?.focus(), 150);
   }, [isOpen]);
@@ -584,14 +403,9 @@ export default function ChatbotWidget() {
       const trimmed = text.trim();
       if (!trimmed || loading) return;
 
-      // Cancel any in-flight request
-      abortRef.current?.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
-
-      setShowCategories(false);
       const topic = detectTopic(trimmed);
       if (topic) setContextTopic(topic);
+      setShowHome(false);
 
       const userMsg: Message = {
         id: `u${Date.now()}`,
@@ -599,70 +413,49 @@ export default function ChatbotWidget() {
         text: trimmed,
         timestamp: new Date(),
       };
-
-      const botId = `b${Date.now()}`;
-      const botMsg: Message = {
-        id: botId,
-        role: "bot",
-        text: "",
-        timestamp: new Date(),
-        streaming: true,
-      };
-
-      // Build history before updating state, excluding streaming/empty messages
-      const history = messages
-        .filter(
-          (m) => m.id !== "welcome" && !m.streaming && m.text.trim() !== "",
-        )
-        .map((m) => ({ role: m.role, text: m.text }));
-
-      setMessages((prev) => [...prev, userMsg, botMsg]);
+      setMessages((prev) => [...prev, userMsg]);
       setInput("");
       setLoading(true);
 
-      try {
-        await streamAIResponse(
-          trimmed,
-          history,
-          contextTopic,
-          (delta) => {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === botId ? { ...m, text: m.text + delta } : m,
-              ),
-            );
-          },
-          controller.signal,
-        );
+      // Check quick Q&A first
+      const quickMatch = QUICK_QA.find(
+        (qa) =>
+          qa.q.toLowerCase() === trimmed.toLowerCase() ||
+          trimmed.toLowerCase().includes(qa.q.toLowerCase().replace("?", "")),
+      );
 
-        // Mark streaming done
-        setMessages((prev) =>
-          prev.map((m) => (m.id === botId ? { ...m, streaming: false } : m)),
-        );
-      } catch (err: any) {
-        if (err?.name === "AbortError") return;
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === botId
-              ? {
-                  ...m,
-                  text: "Sorry, I'm having trouble connecting. Please check your internet and try again.",
-                  streaming: false,
-                }
-              : m,
-          ),
-        );
-      } finally {
-        setLoading(false);
+      const history = messages
+        .filter((m) => m.id !== "welcome" && m.text.trim())
+        .map((m) => ({ role: m.role, text: m.text }));
+
+      let responseText = "";
+      try {
+        if (quickMatch) {
+          responseText = quickMatch.a;
+        } else {
+          responseText = await askGemini(trimmed, history);
+        }
+      } catch (err) {
+        console.error("[Chatbot] Error:", err);
+        responseText =
+          "Sorry, I'm having trouble connecting to Gemini. Please check your internet connection and try again.";
       }
+
+      const botMsg: Message = {
+        id: `b${Date.now()}`,
+        role: "bot",
+        text: responseText,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, botMsg]);
+      setLoading(false);
     },
-    [loading, messages, contextTopic],
+    [loading, messages],
   );
 
   const clearChat = () => {
-    abortRef.current?.abort();
     setMessages([{ ...WELCOME, timestamp: new Date() }]);
-    setShowCategories(true);
+    setShowHome(true);
     setContextTopic("");
     setInput("");
     setLoading(false);
@@ -678,18 +471,17 @@ export default function ChatbotWidget() {
       setIsListening(false);
       return;
     }
-    const recognition: any = new SR();
-    recognition.lang = "en-IN";
-    recognition.interimResults = false;
-    recognition.onresult = (e: any) => {
-      const transcript = e.results[0][0].transcript;
-      setInput(transcript);
+    const rec: any = new SR();
+    rec.lang = "en-IN";
+    rec.interimResults = false;
+    rec.onresult = (e: any) => {
+      setInput(e.results[0][0].transcript);
       setIsListening(false);
     };
-    recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => setIsListening(false);
-    recognitionRef.current = recognition;
-    recognition.start();
+    rec.onerror = () => setIsListening(false);
+    rec.onend = () => setIsListening(false);
+    recognitionRef.current = rec;
+    rec.start();
     setIsListening(true);
   };
 
@@ -697,7 +489,6 @@ export default function ChatbotWidget() {
 
   return (
     <>
-      {/* Floating button */}
       <AnimatePresence>
         {!isOpen && (
           <motion.button
@@ -717,7 +508,6 @@ export default function ChatbotWidget() {
         )}
       </AnimatePresence>
 
-      {/* Chat panel */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -771,7 +561,7 @@ export default function ChatbotWidget() {
                   type="button"
                   onClick={() => setExpanded((v) => !v)}
                   className="w-7 h-7 rounded-full hover:bg-white/20 flex items-center justify-center transition-colors"
-                  aria-label={expanded ? "Collapse chat" : "Expand chat"}
+                  aria-label={expanded ? "Collapse" : "Expand"}
                 >
                   {expanded ? (
                     <Minimize2 className="w-3.5 h-3.5" />
@@ -784,7 +574,7 @@ export default function ChatbotWidget() {
                   data-ocid="chatbot.close_button"
                   onClick={() => setIsOpen(false)}
                   className="w-7 h-7 rounded-full hover:bg-white/20 flex items-center justify-center transition-colors"
-                  aria-label="Close chat"
+                  aria-label="Close"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -793,13 +583,12 @@ export default function ChatbotWidget() {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {showCategories && (
+              {showHome && (
                 <motion.div
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="space-y-3 mb-1"
                 >
-                  {/* Category tabs */}
                   <div className="flex flex-wrap gap-1.5">
                     {CATEGORIES.map((cat) => (
                       <button
@@ -815,23 +604,21 @@ export default function ChatbotWidget() {
                       </button>
                     ))}
                   </div>
-
-                  {/* Quick Questions */}
                   <div>
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                      <span>⚡</span> Quick Questions
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                      ⚡ Quick Questions
                     </p>
                     <div className="flex flex-wrap gap-1.5">
-                      {Object.keys(PREDEFINED_QA).map((question, idx) => (
+                      {QUICK_QA.map((qa, idx) => (
                         <button
-                          key={question}
+                          key={qa.q}
                           type="button"
                           data-ocid={`chatbot.button.${idx + 1}`}
-                          onClick={() => sendMessage(question)}
+                          onClick={() => sendMessage(qa.q)}
                           disabled={loading}
                           className="text-[11px] px-2.5 py-1.5 rounded-full border border-primary/20 bg-primary/5 text-primary hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all font-medium disabled:opacity-40 text-left leading-snug"
                         >
-                          {question}
+                          {qa.q}
                         </button>
                       ))}
                     </div>
@@ -881,37 +668,33 @@ export default function ChatbotWidget() {
                 );
               })}
 
-              {/* Show loading dots when last bot message is streaming with no text yet */}
               <AnimatePresence>
-                {loading &&
-                  messages[messages.length - 1]?.streaming &&
-                  messages[messages.length - 1]?.text === "" && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      className="flex items-center gap-2"
-                      data-ocid="chatbot.loading_state"
-                    >
-                      <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                        <Bot className="w-3.5 h-3.5 text-primary-foreground" />
-                      </div>
-                      <div className="bg-muted rounded-2xl rounded-tl-sm px-4 py-3 flex gap-1">
-                        {[0, 150, 300].map((delay) => (
-                          <span
-                            key={delay}
-                            className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce"
-                            style={{ animationDelay: `${delay}ms` }}
-                          />
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
+                {loading && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="flex items-center gap-2"
+                    data-ocid="chatbot.loading_state"
+                  >
+                    <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                      <Bot className="w-3.5 h-3.5 text-primary-foreground" />
+                    </div>
+                    <div className="bg-muted rounded-2xl rounded-tl-sm px-4 py-3 flex gap-1">
+                      {[0, 150, 300].map((delay) => (
+                        <span
+                          key={delay}
+                          className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce"
+                          style={{ animationDelay: `${delay}ms` }}
+                        />
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
               </AnimatePresence>
               <div ref={bottomRef} />
             </div>
 
-            {/* Voice listening indicator */}
             <AnimatePresence>
               {isListening && (
                 <motion.div
@@ -927,7 +710,7 @@ export default function ChatbotWidget() {
               )}
             </AnimatePresence>
 
-            {/* Input area */}
+            {/* Input */}
             <div className="border-t border-border p-3 flex-shrink-0">
               <form
                 onSubmit={(e) => {
@@ -957,7 +740,7 @@ export default function ChatbotWidget() {
                     onClick={toggleVoice}
                     disabled={loading}
                     className="rounded-xl w-9 h-9 flex-shrink-0"
-                    aria-label={isListening ? "Stop listening" : "Voice input"}
+                    aria-label={isListening ? "Stop" : "Voice input"}
                   >
                     {isListening ? (
                       <MicOff className="w-4 h-4" />
