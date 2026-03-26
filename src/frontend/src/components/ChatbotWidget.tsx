@@ -58,65 +58,32 @@ interface GeminiContent {
   parts: { text: string }[];
 }
 
-// Stream Gemini response, calling onChunk for each text delta
-// Bug Fix 1: Added 20-second timeout with merged AbortSignal
-async function streamGemini(
+async function callGemini(
   model: string,
   contents: GeminiContent[],
   systemInstruction: string,
-  onChunk: (delta: string) => void,
   signal: AbortSignal,
-): Promise<void> {
-  const ac = new AbortController();
-  const tid = setTimeout(() => ac.abort(new Error("timeout")), 20000);
-  // If outer signal aborts, abort inner too
-  signal.addEventListener("abort", () => ac.abort(signal.reason), {
-    once: true,
+): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: systemInstruction }] },
+      contents,
+      generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
+    }),
   });
-
-  try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${GEMINI_API_KEY}&alt=sse`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: ac.signal,
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        contents,
-        generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
-      }),
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      console.error(`[Gemini stream] ${model} → ${res.status}:`, err);
-      throw new Error(`HTTP ${res.status}`);
-    }
-    const reader = res.body?.getReader();
-    if (!reader) throw new Error("No response body");
-    const decoder = new TextDecoder();
-    let buffer = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const json = line.slice(6).trim();
-        if (!json || json === "[DONE]") continue;
-        try {
-          const chunk = JSON.parse(json);
-          const delta = chunk?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (delta) onChunk(delta);
-        } catch {
-          // ignore malformed chunk
-        }
-      }
-    }
-  } finally {
-    clearTimeout(tid);
+  if (!res.ok) {
+    const err = await res.text();
+    console.error(`[Gemini] ${model} → ${res.status}:`, err);
+    throw new Error(`HTTP ${res.status}`);
   }
+  const data = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Empty response");
+  return text;
 }
 
 async function streamAIResponse(
@@ -140,16 +107,41 @@ async function streamAIResponse(
   if (contents.length > 0 && contents[0].role !== "user") contents.shift();
   contents.push({ role: "user", parts: [{ text: userText }] });
 
-  for (const model of GEMINI_MODELS) {
-    try {
-      await streamGemini(model, contents, systemInstruction, onChunk, signal);
-      return;
-    } catch (err) {
-      if (signal.aborted) throw err;
-      console.warn(`[Gemini] ${model} failed:`, err);
+  // Add 20-second timeout
+  const ac = new AbortController();
+  const tid = setTimeout(() => ac.abort(new Error("timeout")), 20000);
+  signal.addEventListener("abort", () => ac.abort(signal.reason), {
+    once: true,
+  });
+
+  let fullText = "";
+  try {
+    for (const model of GEMINI_MODELS) {
+      try {
+        fullText = await callGemini(
+          model,
+          contents,
+          systemInstruction,
+          ac.signal,
+        );
+        break;
+      } catch (err) {
+        if (ac.signal.aborted) throw err;
+        console.warn(`[Gemini] ${model} failed:`, err);
+      }
     }
+    if (!fullText) throw new Error("All Gemini models failed");
+  } finally {
+    clearTimeout(tid);
   }
-  throw new Error("All Gemini models failed");
+
+  // Simulate word-by-word streaming for real-time feel
+  const words = fullText.split(" ");
+  for (const word of words) {
+    if (signal.aborted) break;
+    onChunk(`${word} `);
+    await new Promise((r) => setTimeout(r, 18));
+  }
 }
 
 // ─── Topic Detection ──────────────────────────────────────────────────────────
@@ -564,7 +556,7 @@ export default function ChatbotWidget() {
         streaming: true,
       };
 
-      // Bug Fix 3: Build history before updating state, excluding streaming/empty messages
+      // Build history before updating state, excluding streaming/empty messages
       const history = messages
         .filter(
           (m) => m.id !== "welcome" && !m.streaming && m.text.trim() !== "",
@@ -812,7 +804,7 @@ export default function ChatbotWidget() {
                 );
               })}
 
-              {/* Bug Fix 2: Show loading dots when last bot message is streaming with no text yet */}
+              {/* Show loading dots when last bot message is streaming with no text yet */}
               <AnimatePresence>
                 {loading &&
                   messages[messages.length - 1]?.streaming &&
