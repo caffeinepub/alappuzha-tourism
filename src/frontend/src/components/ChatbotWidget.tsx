@@ -24,6 +24,46 @@ import {
   useState,
 } from "react";
 
+// ─── Predefined Q&A ───────────────────────────────────────────────────────────
+
+const PREDEFINED_QA: Record<string, string> = {
+  "What is Alappuzha famous for?":
+    "Alappuzha (Alleppey) is famous for:\n- **Backwaters & Houseboats**: Kerala's most iconic houseboat cruises\n- **Nehru Trophy Boat Race**: Legendary snake boat race held every August\n- **Alappuzha Beach**: One of Kerala's most popular beaches\n- **Coir Industry**: Traditional coconut fiber products\n- **Kuttanad**: The 'Rice Bowl of Kerala', fields below sea level\n- **Heritage**: Colonial-era canals, churches, and temples",
+
+  "Best time to visit Alappuzha?":
+    "**Best time: October to March** (Winter/Peak Season)\n- Cool weather (22–32°C), perfect for backwater cruises\n- All tourist spots are open and accessible\n- Nehru Trophy Boat Race: August (Snake Boat Race)\n\n**Monsoon (June–September)**:\n- Lush green scenery, romantic ambiance\n- Some activities may be restricted\n- Great for budget travelers (lower prices)\n\n**Avoid April–May**: Very hot and humid",
+
+  "How to reach Alappuzha?":
+    "**By Train**: Alappuzha Railway Station is well connected to major cities. Trains from Kochi (~1.5 hrs), Thiruvananthapuram (~2.5 hrs), Mumbai, Delhi.\n\n**By Road**: 85 km from Kochi (KSRTC buses, private taxis). NH66 passes through Alappuzha.\n\n**By Air**: Nearest airport is Cochin International Airport (85 km). Taxis and buses available.\n\n**By Water**: Ferry services from Kottayam and Kollam (scenic route).",
+
+  "What is houseboat price in Alappuzha?":
+    "**Houseboat Pricing in Alappuzha:**\n\n- **Budget (1 BHK)**: ₹5,000–₹8,000/night\n- **Standard (2 BHK)**: ₹8,000–₹12,000/night\n- **Premium/Luxury**: ₹12,000–₹20,000+/night\n\n**Includes**: Accommodation, all meals, AC, crew\n**Duration**: Typically 22-hour package (noon to noon)\n**Best Route**: Alleppey to Kumarakom or Punnamada Lake\n\nBook via Booking.com or MakeMyTrip for best deals.",
+
+  "What food to try in Alappuzha?":
+    "**Must-try foods in Alappuzha:**\n\n- **Karimeen Pollichathu** (Pearl Spot Fish) — the signature dish\n- **Prawn Curry** with coconut milk\n- **Kerala Fish Curry** with kodampuli (gamboge)\n- **Appam & Stew** — fluffy rice pancakes with coconut stew\n- **Kerala Sadya** — traditional feast on banana leaf\n- **Puttu & Kadala Curry** — steamed rice cake with chickpea curry\n- **Toddy & Kallu Shaap** — traditional toddy shops\n\nBest restaurants: Thaff Restaurant, Mushroom Restaurant, Dream Catcher.",
+
+  "Top tourist places in Alappuzha?":
+    "**Top Places to Visit in Alappuzha:**\n\n1. **Alappuzha Beach** — Pier, lighthouse, sunset views\n2. **Punnamada Lake** — Houseboat hub, Nehru Trophy venue\n3. **Vembanad Lake** — Largest lake in Kerala\n4. **Krishnapuram Palace** — 18th-century palace, Gajendra Moksham mural\n5. **St. Andrew's Basilica, Arthunkal** — Famous church, annual feast\n6. **Revi Karunakaran Museum** — Glass & crystal collection\n7. **Marari Beach** — Pristine, less crowded beach\n8. **Kuttanad Backwaters** — Below sea-level farming fields\n9. **Pathiramanal Island** — Bird sanctuary on Vembanad Lake\n10. **Ambalapuzha Sree Krishna Temple** — Famous for Palpayasam",
+
+  "Local transport options in Alappuzha?":
+    "**Local Transport in Alappuzha:**\n\n- **Auto Rickshaws**: Most common, metered or negotiated fares (₹30–₹150)\n- **KSRTC Buses**: Connect major towns, very affordable\n- **Ferries/Boats**: Govt. boat services on backwater routes (₹5–₹30)\n- **Cycle Rickshaws**: For short distances in town center\n- **Bicycles**: Many guesthouses rent bicycles (₹50–₹100/day)\n- **Taxis/Cabs**: Ola/Uber available, also local taxis\n- **Private Speedboats**: For quick backwater tours (₹500–₹1500)",
+};
+
+function findPredefinedAnswer(input: string): string | null {
+  const lower = input.trim().toLowerCase();
+  for (const [question, answer] of Object.entries(PREDEFINED_QA)) {
+    if (lower === question.toLowerCase()) return answer;
+    // Substring match: if the user's input is contained in the question or vice versa
+    if (
+      question.toLowerCase().includes(lower) ||
+      lower.includes(question.toLowerCase().replace("?", ""))
+    ) {
+      return answer;
+    }
+  }
+  return null;
+}
+
 // ─── Gemini API Setup ────────────────────────────────────────────────────────
 
 const GEMINI_API_KEY = "AIzaSyAsrVCwCFsVmniTLlOtX-8qARmE8H-qVgE";
@@ -93,6 +133,19 @@ async function streamAIResponse(
   onChunk: (delta: string) => void,
   signal: AbortSignal,
 ): Promise<void> {
+  // Check predefined answers first
+  const predefined = findPredefinedAnswer(userText);
+  if (predefined) {
+    // Simulate word-by-word streaming for consistency
+    const words = predefined.split(" ");
+    for (const word of words) {
+      if (signal.aborted) break;
+      onChunk(`${word} `);
+      await new Promise((r) => setTimeout(r, 18));
+    }
+    return;
+  }
+
   const systemInstruction = contextTopic
     ? `${BASE_SYSTEM_INSTRUCTION}\n\nContext: The user has been asking about [${contextTopic}]. Tailor your response accordingly.`
     : BASE_SYSTEM_INSTRUCTION;
@@ -744,21 +797,45 @@ export default function ChatbotWidget() {
                 <motion.div
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="flex flex-wrap gap-1.5 mb-1"
+                  className="space-y-3 mb-1"
                 >
-                  {CATEGORIES.map((cat) => (
-                    <button
-                      key={cat.label}
-                      type="button"
-                      data-ocid="chatbot.tab"
-                      onClick={() => sendMessage(cat.prompt)}
-                      disabled={loading}
-                      className="text-xs px-2.5 py-1.5 rounded-full border border-border bg-background hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all font-medium disabled:opacity-40 flex items-center gap-1"
-                    >
-                      <span>{cat.emoji}</span>
-                      <span>{cat.label}</span>
-                    </button>
-                  ))}
+                  {/* Category tabs */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {CATEGORIES.map((cat) => (
+                      <button
+                        key={cat.label}
+                        type="button"
+                        data-ocid="chatbot.tab"
+                        onClick={() => sendMessage(cat.prompt)}
+                        disabled={loading}
+                        className="text-xs px-2.5 py-1.5 rounded-full border border-border bg-background hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all font-medium disabled:opacity-40 flex items-center gap-1"
+                      >
+                        <span>{cat.emoji}</span>
+                        <span>{cat.label}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Quick Questions */}
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                      <span>⚡</span> Quick Questions
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.keys(PREDEFINED_QA).map((question, idx) => (
+                        <button
+                          key={question}
+                          type="button"
+                          data-ocid={`chatbot.button.${idx + 1}`}
+                          onClick={() => sendMessage(question)}
+                          disabled={loading}
+                          className="text-[11px] px-2.5 py-1.5 rounded-full border border-primary/20 bg-primary/5 text-primary hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all font-medium disabled:opacity-40 text-left leading-snug"
+                        >
+                          {question}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </motion.div>
               )}
 
