@@ -59,6 +59,7 @@ interface GeminiContent {
 }
 
 // Stream Gemini response, calling onChunk for each text delta
+// Bug Fix 1: Added 20-second timeout with merged AbortSignal
 async function streamGemini(
   model: string,
   contents: GeminiContent[],
@@ -66,44 +67,55 @@ async function streamGemini(
   onChunk: (delta: string) => void,
   signal: AbortSignal,
 ): Promise<void> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${GEMINI_API_KEY}&alt=sse`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    signal,
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: systemInstruction }] },
-      contents,
-      generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
-    }),
+  const ac = new AbortController();
+  const tid = setTimeout(() => ac.abort(new Error("timeout")), 20000);
+  // If outer signal aborts, abort inner too
+  signal.addEventListener("abort", () => ac.abort(signal.reason), {
+    once: true,
   });
-  if (!res.ok) {
-    const err = await res.text();
-    console.error(`[Gemini stream] ${model} → ${res.status}:`, err);
-    throw new Error(`HTTP ${res.status}`);
-  }
-  const reader = res.body?.getReader();
-  if (!reader) throw new Error("No response body");
-  const decoder = new TextDecoder();
-  let buffer = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      const json = line.slice(6).trim();
-      if (!json || json === "[DONE]") continue;
-      try {
-        const chunk = JSON.parse(json);
-        const delta = chunk?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (delta) onChunk(delta);
-      } catch {
-        // ignore malformed chunk
+
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${GEMINI_API_KEY}&alt=sse`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: ac.signal,
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        contents,
+        generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      console.error(`[Gemini stream] ${model} → ${res.status}:`, err);
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("No response body");
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const json = line.slice(6).trim();
+        if (!json || json === "[DONE]") continue;
+        try {
+          const chunk = JSON.parse(json);
+          const delta = chunk?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (delta) onChunk(delta);
+        } catch {
+          // ignore malformed chunk
+        }
       }
     }
+  } finally {
+    clearTimeout(tid);
   }
 }
 
@@ -552,15 +564,18 @@ export default function ChatbotWidget() {
         streaming: true,
       };
 
+      // Bug Fix 3: Build history before updating state, excluding streaming/empty messages
+      const history = messages
+        .filter(
+          (m) => m.id !== "welcome" && !m.streaming && m.text.trim() !== "",
+        )
+        .map((m) => ({ role: m.role, text: m.text }));
+
       setMessages((prev) => [...prev, userMsg, botMsg]);
       setInput("");
       setLoading(true);
 
       try {
-        const history = messages
-          .filter((m) => m.id !== "welcome")
-          .map((m) => ({ role: m.role, text: m.text }));
-
         await streamAIResponse(
           trimmed,
           history,
@@ -797,30 +812,32 @@ export default function ChatbotWidget() {
                 );
               })}
 
-              {/* Initial loading dots before first token arrives */}
+              {/* Bug Fix 2: Show loading dots when last bot message is streaming with no text yet */}
               <AnimatePresence>
-                {loading && messages[messages.length - 1]?.role === "user" && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    className="flex items-center gap-2"
-                    data-ocid="chatbot.loading_state"
-                  >
-                    <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                      <Bot className="w-3.5 h-3.5 text-primary-foreground" />
-                    </div>
-                    <div className="bg-muted rounded-2xl rounded-tl-sm px-4 py-3 flex gap-1">
-                      {[0, 150, 300].map((delay) => (
-                        <span
-                          key={delay}
-                          className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce"
-                          style={{ animationDelay: `${delay}ms` }}
-                        />
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
+                {loading &&
+                  messages[messages.length - 1]?.streaming &&
+                  messages[messages.length - 1]?.text === "" && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="flex items-center gap-2"
+                      data-ocid="chatbot.loading_state"
+                    >
+                      <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                        <Bot className="w-3.5 h-3.5 text-primary-foreground" />
+                      </div>
+                      <div className="bg-muted rounded-2xl rounded-tl-sm px-4 py-3 flex gap-1">
+                        {[0, 150, 300].map((delay) => (
+                          <span
+                            key={delay}
+                            className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce"
+                            style={{ animationDelay: `${delay}ms` }}
+                          />
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
               </AnimatePresence>
               <div ref={bottomRef} />
             </div>
