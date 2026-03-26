@@ -4,7 +4,6 @@ import {
   Bot,
   Check,
   ChevronDown,
-  ChevronUp,
   Copy,
   Maximize2,
   MessageCircle,
@@ -27,12 +26,11 @@ import {
 
 // ─── Gemini API Setup ────────────────────────────────────────────────────────
 
-const GEMINI_API_KEY = "AIzaSyDVkr9yIxvVYeEzhzf8YGCY1kIX5AqWwAA";
+const GEMINI_API_KEY = "AIzaSyAsrVCwCFsVmniTLlOtX-8qARmE8H-qVgE";
 const GEMINI_MODELS = [
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-lite",
   "gemini-1.5-flash",
   "gemini-1.5-flash-8b",
+  "gemini-1.5-pro",
 ];
 
 const BASE_SYSTEM_INSTRUCTION = `You are an expert AI travel assistant for Alappuzha (Alleppey), Kerala, India. You have deep knowledge of:
@@ -60,46 +58,62 @@ interface GeminiContent {
   parts: { text: string }[];
 }
 
-async function callGemini(
+// Stream Gemini response, calling onChunk for each text delta
+async function streamGemini(
   model: string,
   contents: GeminiContent[],
   systemInstruction: string,
-): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 25000);
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: controller.signal,
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        contents,
-        generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
-      }),
-    });
-    clearTimeout(timer);
-    if (!res.ok) {
-      const err = await res.text();
-      console.error(`[Gemini] ${model} → ${res.status}:`, err);
-      throw new Error(`HTTP ${res.status}`);
+  onChunk: (delta: string) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${GEMINI_API_KEY}&alt=sse`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: systemInstruction }] },
+      contents,
+      generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    console.error(`[Gemini stream] ${model} → ${res.status}:`, err);
+    throw new Error(`HTTP ${res.status}`);
+  }
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("No response body");
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const json = line.slice(6).trim();
+      if (!json || json === "[DONE]") continue;
+      try {
+        const chunk = JSON.parse(json);
+        const delta = chunk?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (delta) onChunk(delta);
+      } catch {
+        // ignore malformed chunk
+      }
     }
-    const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error("Empty response");
-    return text;
-  } catch (err) {
-    clearTimeout(timer);
-    throw err;
   }
 }
 
-async function getAIResponse(
+async function streamAIResponse(
   userText: string,
   history: { role: "user" | "bot"; text: string }[],
   contextTopic: string,
-): Promise<string> {
+  onChunk: (delta: string) => void,
+  signal: AbortSignal,
+): Promise<void> {
   const systemInstruction = contextTopic
     ? `${BASE_SYSTEM_INSTRUCTION}\n\nContext: The user has been asking about [${contextTopic}]. Tailor your response accordingly.`
     : BASE_SYSTEM_INSTRUCTION;
@@ -116,9 +130,10 @@ async function getAIResponse(
 
   for (const model of GEMINI_MODELS) {
     try {
-      const result = await callGemini(model, contents, systemInstruction);
-      return result;
+      await streamGemini(model, contents, systemInstruction, onChunk, signal);
+      return;
     } catch (err) {
+      if (signal.aborted) throw err;
       console.warn(`[Gemini] ${model} failed:`, err);
     }
   }
@@ -359,35 +374,6 @@ const CATEGORIES = [
   },
 ];
 
-// ─── Typing Animation Hook ────────────────────────────────────────────────────
-
-function useTypingAnimation(fullText: string, active: boolean) {
-  const [displayed, setDisplayed] = useState("");
-  const [done, setDone] = useState(false);
-
-  useEffect(() => {
-    if (!active || !fullText) {
-      setDisplayed(fullText);
-      setDone(true);
-      return;
-    }
-    setDisplayed("");
-    setDone(false);
-    let idx = 0;
-    const interval = setInterval(() => {
-      idx++;
-      setDisplayed(fullText.slice(0, idx));
-      if (idx >= fullText.length) {
-        clearInterval(interval);
-        setDone(true);
-      }
-    }, 12);
-    return () => clearInterval(interval);
-  }, [fullText, active]);
-
-  return { displayed, done };
-}
-
 // ─── Message Types ────────────────────────────────────────────────────────────
 
 interface Message {
@@ -395,7 +381,7 @@ interface Message {
   role: "user" | "bot";
   text: string;
   timestamp: Date;
-  animate?: boolean;
+  streaming?: boolean;
 }
 
 // ─── Bot Message Component ────────────────────────────────────────────────────
@@ -411,8 +397,7 @@ function BotMessage({
 }) {
   const [copied, setCopied] = useState(false);
   const [hovered, setHovered] = useState(false);
-  const { displayed, done } = useTypingAnimation(msg.text, !!msg.animate);
-  const followups = isLast && done ? getFollowups(msg.text) : [];
+  const followups = isLast && !msg.streaming ? getFollowups(msg.text) : [];
 
   const copy = () => {
     navigator.clipboard.writeText(msg.text);
@@ -437,9 +422,13 @@ function BotMessage({
         </div>
         <div className="flex-1 min-w-0">
           <div className="bg-muted text-foreground rounded-2xl rounded-tl-sm px-3.5 py-2.5 relative group max-w-[90%]">
-            {renderMarkdown(displayed)}
+            {renderMarkdown(msg.text)}
+            {/* Blinking cursor while streaming */}
+            {msg.streaming && (
+              <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-middle" />
+            )}
             <AnimatePresence>
-              {hovered && done && (
+              {hovered && !msg.streaming && (
                 <motion.button
                   type="button"
                   initial={{ opacity: 0, scale: 0.8 }}
@@ -458,9 +447,11 @@ function BotMessage({
               )}
             </AnimatePresence>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-0.5 ml-1">
-            {timestamp}
-          </p>
+          {!msg.streaming && (
+            <p className="text-[10px] text-muted-foreground mt-0.5 ml-1">
+              {timestamp}
+            </p>
+          )}
         </div>
       </div>
 
@@ -512,8 +503,8 @@ export default function ChatbotWidget() {
   const inputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  // Check speech support
   useEffect(() => {
     const SR =
       (window as any).SpeechRecognition ||
@@ -536,6 +527,11 @@ export default function ChatbotWidget() {
       const trimmed = text.trim();
       if (!trimmed || loading) return;
 
+      // Cancel any in-flight request
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       setShowCategories(false);
       const topic = detectTopic(trimmed);
       if (topic) setContextTopic(topic);
@@ -546,7 +542,17 @@ export default function ChatbotWidget() {
         text: trimmed,
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, userMsg]);
+
+      const botId = `b${Date.now()}`;
+      const botMsg: Message = {
+        id: botId,
+        role: "bot",
+        text: "",
+        timestamp: new Date(),
+        streaming: true,
+      };
+
+      setMessages((prev) => [...prev, userMsg, botMsg]);
       setInput("");
       setLoading(true);
 
@@ -554,27 +560,38 @@ export default function ChatbotWidget() {
         const history = messages
           .filter((m) => m.id !== "welcome")
           .map((m) => ({ role: m.role, text: m.text }));
-        const reply = await getAIResponse(trimmed, history, contextTopic);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `b${Date.now()}`,
-            role: "bot",
-            text: reply,
-            timestamp: new Date(),
-            animate: true,
+
+        await streamAIResponse(
+          trimmed,
+          history,
+          contextTopic,
+          (delta) => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === botId ? { ...m, text: m.text + delta } : m,
+              ),
+            );
           },
-        ]);
-      } catch {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `b${Date.now()}`,
-            role: "bot",
-            text: "Sorry, I'm having trouble connecting. Please check your internet and try again.",
-            timestamp: new Date(),
-          },
-        ]);
+          controller.signal,
+        );
+
+        // Mark streaming done
+        setMessages((prev) =>
+          prev.map((m) => (m.id === botId ? { ...m, streaming: false } : m)),
+        );
+      } catch (err: any) {
+        if (err?.name === "AbortError") return;
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === botId
+              ? {
+                  ...m,
+                  text: "Sorry, I'm having trouble connecting. Please check your internet and try again.",
+                  streaming: false,
+                }
+              : m,
+          ),
+        );
       } finally {
         setLoading(false);
       }
@@ -583,10 +600,12 @@ export default function ChatbotWidget() {
   );
 
   const clearChat = () => {
+    abortRef.current?.abort();
     setMessages([{ ...WELCOME, timestamp: new Date() }]);
     setShowCategories(true);
     setContextTopic("");
     setInput("");
+    setLoading(false);
   };
 
   const toggleVoice = () => {
@@ -693,7 +712,6 @@ export default function ChatbotWidget() {
                   onClick={() => setExpanded((v) => !v)}
                   className="w-7 h-7 rounded-full hover:bg-white/20 flex items-center justify-center transition-colors"
                   aria-label={expanded ? "Collapse chat" : "Expand chat"}
-                  title={expanded ? "Collapse" : "Expand"}
                 >
                   {expanded ? (
                     <Minimize2 className="w-3.5 h-3.5" />
@@ -715,7 +733,6 @@ export default function ChatbotWidget() {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {/* Category tabs (shown before first user msg) */}
               {showCategories && (
                 <motion.div
                   initial={{ opacity: 0, y: 4 }}
@@ -780,9 +797,9 @@ export default function ChatbotWidget() {
                 );
               })}
 
-              {/* Typing indicator */}
+              {/* Initial loading dots before first token arrives */}
               <AnimatePresence>
-                {loading && (
+                {loading && messages[messages.length - 1]?.role === "user" && (
                   <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
